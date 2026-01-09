@@ -18,7 +18,8 @@ class PopupController {
       minPageStay: 5000,
       maxPageStay: 15000,
       readDepth: 0.7,
-      clickProbability: 0.6
+      clickProbability: 0.6,
+      quickMode: false
     };
 
     this.init();
@@ -93,8 +94,8 @@ class PopupController {
 
     // 发送启动消息到 content script，带重试
     this.sendMessageWithRetry(tab.id, { action: 'start' }, (response) => {
-      if (response?.success) {
-        this.isRunning = true;
+      // 延迟检查：确保响应处理时没有同时执行停止操作
+      if (response?.success && this.isRunning) {
         this.updateStatus();
         this.log('开始自动浏览', 'info');
       }
@@ -140,8 +141,8 @@ class PopupController {
     }
 
     this.sendMessageWithRetry(tab.id, { action: 'resetAndStart' }, (response) => {
-      if (response?.success) {
-        this.isRunning = true;
+      // 延迟检查：确保响应处理时没有同时执行停止操作
+      if (response?.success && this.isRunning) {
         this.stats.totalBrowsed = 0;
         this.updateStatus();
         this.updateStats();
@@ -163,11 +164,19 @@ class PopupController {
   }
 
   async applySettings() {
-    // 输入值是秒，转换为毫秒
-    const minCommentRead = parseFloat(document.getElementById('minCommentRead').value) * 1000;
-    const maxCommentRead = parseFloat(document.getElementById('maxCommentRead').value) * 1000;
-    const minPageStay = parseInt(document.getElementById('minPageStay').value) * 1000;
-    const maxPageStay = parseInt(document.getElementById('maxPageStay').value) * 1000;
+    // 输入值是秒，转换为毫秒（确保 min < max）
+    let minCommentRead = parseFloat(document.getElementById('minCommentRead').value) * 1000;
+    let maxCommentRead = parseFloat(document.getElementById('maxCommentRead').value) * 1000;
+    let minPageStay = parseInt(document.getElementById('minPageStay').value) * 1000;
+    let maxPageStay = parseInt(document.getElementById('maxPageStay').value) * 1000;
+
+    // 确保 min < max
+    if (minCommentRead > maxCommentRead) {
+      [minCommentRead, maxCommentRead] = [maxCommentRead, minCommentRead];
+    }
+    if (minPageStay > maxPageStay) {
+      [minPageStay, maxPageStay] = [maxPageStay, minPageStay];
+    }
 
     const newConfig = {
       minScrollDelay: 800,
@@ -177,7 +186,8 @@ class PopupController {
       minPageStay: minPageStay,
       maxPageStay: maxPageStay,
       readDepth: 0.7,
-      clickProbability: parseFloat(document.getElementById('clickProbability').value)
+      clickProbability: parseFloat(document.getElementById('clickProbability').value),
+      quickMode: document.getElementById('quickMode').checked
     };
 
     // 验证设置
@@ -299,12 +309,19 @@ class PopupController {
       if (result.linuxDoConfig) {
         this.config = result.linuxDoConfig;
 
-        // 更新 UI（转换为秒显示）
-        document.getElementById('minCommentRead').value = (this.config.minCommentRead || 1000) / 1000;
-        document.getElementById('maxCommentRead').value = (this.config.maxCommentRead || 4000) / 1000;
-        document.getElementById('minPageStay').value = Math.floor(this.config.minPageStay / 1000);
-        document.getElementById('maxPageStay').value = Math.floor(this.config.maxPageStay / 1000);
+        // 更新 UI（转换为秒显示，确保小数显示在前面）
+        const comment1 = (this.config.minCommentRead || 1000) / 1000;
+        const comment2 = (this.config.maxCommentRead || 4000) / 1000;
+        document.getElementById('minCommentRead').value = Math.min(comment1, comment2);
+        document.getElementById('maxCommentRead').value = Math.max(comment1, comment2);
+
+        const page1 = Math.floor((this.config.minPageStay || 5000) / 1000);
+        const page2 = Math.floor((this.config.maxPageStay || 15000) / 1000);
+        document.getElementById('minPageStay').value = Math.min(page1, page2);
+        document.getElementById('maxPageStay').value = Math.max(page1, page2);
+
         document.getElementById('clickProbability').value = this.config.clickProbability;
+        document.getElementById('quickMode').checked = this.config.quickMode || false;
       }
     });
   }

@@ -245,7 +245,7 @@ body {
 }
 
 .input-group input {
-  width: 35px;
+  width: 45px;
   padding: 4px 6px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -267,6 +267,65 @@ body {
 .unit {
   font-size: 9px;
   color: var(--text-muted);
+}
+
+/* 设置项全宽 */
+.setting-item-full {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+/* 开关样式 */
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  width: 100%;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.switch-checkbox {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  appearance: none;
+  background: var(--border-color);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  flex-shrink: 0;
+}
+
+.switch-checkbox::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--bg-color);
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch-checkbox:checked {
+  background: var(--text-primary);
+}
+
+.switch-checkbox:checked::before {
+  transform: translateX(16px);
+}
+
+.switch-slider {
+  display: none;
+}
+
+.switch-text {
+  flex: 1;
 }
 
 .btn-apply {

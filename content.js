@@ -15,7 +15,8 @@ class HumanBrowser {
       maxCommentRead: 4000,
       readDepth: 0.7,
       mouseMoveProbability: 0.3,
-      clickProbability: 0.6
+      clickProbability: 0.6,
+      quickMode: false
     };
 
     this.init();
@@ -172,9 +173,13 @@ class HumanBrowser {
     const maxNoNewComments = 3; // 连续3次没有新评论才停止
 
     while (noNewCommentsCount < maxNoNewComments) {
-      // 检查是否已停止
-      if (!this.state.isRunning) {
-        this.sendMessage({ type: 'log', message: '浏览已停止' });
+      // 检查是否已停止或切换到快速模式
+      if (!this.state.isRunning || this.config.quickMode) {
+        if (this.config.quickMode) {
+          this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
+        } else {
+          this.sendMessage({ type: 'log', message: '浏览已停止' });
+        }
         return;
       }
 
@@ -192,9 +197,13 @@ class HumanBrowser {
         const startIndex = this.state.lastCommentIndex || 0;
 
         for (let i = startIndex; i < comments.length; i++) {
-          // 检查是否已停止
-          if (!this.state.isRunning) {
-            this.sendMessage({ type: 'log', message: '浏览已停止' });
+          // 每次循环都检查状态和配置
+          if (!this.state.isRunning || this.config.quickMode) {
+            if (this.config.quickMode) {
+              this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
+            } else {
+              this.sendMessage({ type: 'log', message: '浏览已停止' });
+            }
             return;
           }
 
@@ -204,6 +213,16 @@ class HumanBrowser {
           // 滚动到评论位置
           comment.scrollIntoView({ behavior: 'smooth', block: 'center' });
           await this.sleep(500); // 等待滚动完成
+
+          // 滚动后再次检查状态
+          if (!this.state.isRunning || this.config.quickMode) {
+            if (this.config.quickMode) {
+              this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
+            } else {
+              this.sendMessage({ type: 'log', message: '浏览已停止' });
+            }
+            return;
+          }
 
           // 使用配置的阅读时间范围
           const readTime = this.random(this.config.minCommentRead, this.config.maxCommentRead);
@@ -279,20 +298,41 @@ class HumanBrowser {
     // 随机鼠标移动
     this.randomMouseMove();
 
-    // 逐个浏览评论（模拟人类阅读）
-    await this.browseCommentsSlowly();
+    // 快速浏览模式：跳过评论，停留5-10秒
+    if (this.config.quickMode) {
+      this.sendMessage({ type: 'log', message: '快速浏览模式：跳过评论' });
 
-    // 检查是否还在运行
-    if (!this.state.isRunning) {
-      this.sendMessage({ type: 'log', message: '已停止，不跳转' });
-      return;
+      // 检查是否已停止（在输出日志后、sleep前检查）
+      if (!this.state.isRunning) {
+        this.sendMessage({ type: 'log', message: '已停止' });
+        return;
+      }
+
+      const stayTime = this.random(5000, 10000);
+      this.sendMessage({ type: 'log', message: `停留阅读 ${Math.floor(stayTime / 1000)}秒` });
+      await this.sleep(stayTime);
+    } else {
+      // 正常模式：逐个浏览评论（模拟人类阅读）
+      await this.browseCommentsSlowly();
+
+      // 检查是否还在运行
+      if (!this.state.isRunning) {
+        this.sendMessage({ type: 'log', message: '已停止，不跳转' });
+        return;
+      }
+
+      // 停留阅读时间
+      const stayTime = this.random(this.config.minPageStay, this.config.maxPageStay);
+
+      // 在输出日志和 sleep 前再次检查
+      if (!this.state.isRunning) {
+        this.sendMessage({ type: 'log', message: '已停止' });
+        return;
+      }
+
+      this.sendMessage({ type: 'log', message: `停留阅读 ${Math.floor(stayTime / 1000)}秒` });
+      await this.sleep(stayTime);
     }
-
-    // 停留阅读时间
-    const stayTime = this.random(this.config.minPageStay, this.config.maxPageStay);
-    this.sendMessage({ type: 'log', message: `停留阅读 ${Math.floor(stayTime / 1000)}秒` });
-
-    await this.sleep(stayTime);
 
     // 再次检查是否还在运行
     if (!this.state.isRunning) {
@@ -323,6 +363,12 @@ class HumanBrowser {
   async handleListPage() {
     await this.sleep(this.random(1500, 2500));
 
+    // 检查是否还在运行
+    if (!this.state.isRunning) {
+      this.sendMessage({ type: 'log', message: '已停止' });
+      return;
+    }
+
     const posts = this.getPostLinks();
     this.sendMessage({ type: 'log', message: `找到 ${posts.length} 个帖子` });
 
@@ -351,6 +397,12 @@ class HumanBrowser {
 
     // 按顺序选择下一个未浏览帖子（更稳定）
     const nextPost = unbrowsed[0];
+
+    // 检查是否还在运行
+    if (!this.state.isRunning) {
+      this.sendMessage({ type: 'log', message: '已停止' });
+      return;
+    }
 
     this.sendMessage({ type: 'log', message: `跳转到: ${nextPost} (剩余 ${unbrowsed.length - 1} 个)` });
     await this.sleep(this.random(1000, 2000));
