@@ -14,7 +14,7 @@
   --border-color: #E0E0E0;
   --border-light: #F0F0F0;
   --accent-color: #000000;
-  --success-color: #000000;
+  --success-color: #22c55e;
   --danger-color: #000000;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -23,8 +23,7 @@
 
 body {
   width: 280px;
-  min-height: 350px;
-  max-height: 400px;
+  height: 400px;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', sans-serif;
   background: var(--bg-color);
   color: var(--text-primary);

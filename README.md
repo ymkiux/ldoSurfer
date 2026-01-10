@@ -1,4 +1,4 @@
-# ldoSurfer
+# ldoSurfer - Linux DO Auto Browse Tool
 
 <div align="center">
 
@@ -7,50 +7,50 @@
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0.0-orange.svg)
 
-**模拟人类浏览行为，自动浏览 linux.do 帖子**
+**Simulate human browsing behavior, automatically browse linux.do posts | Chrome Browser Automation Extension**
 
 </div>
 
 ---
 
-### 简介
+## Overview
 
-ldoSurfer 是一个 Chrome 浏览器扩展，通过模拟真实人类的浏览行为（平滑滚动、随机停留、鼠标移动等）自动浏览 linux.do 社区帖子。
+ldoSurfer is a Chrome browser extension that automatically browses linux.do community posts by simulating real human browsing behavior (smooth scrolling, random dwell time, mouse movement, etc.).
 
-> **免责声明**：本项目仅供学习交流使用。请遵守 [Linux DO 服务条款](https://linux.do/tos) 和社区规则。
+> **Disclaimer**: This project is for learning and communication purposes only. Please comply with [Linux DO Terms of Service](https://linux.do/tos) and community rules.
 
-### 功能特性
+## Features
 
-- **人类化浏览模拟** - 多步平滑滚动、随机鼠标移动、可配置停留时间
-- **智能浏览管理** - 自动记录历史、避免重复、跨页面状态持久化
-- **快速浏览模式** - 可选跳过评论浏览，快速浏览更多帖子（默认关闭）
-- **实时监控面板** - 浏览统计、活动日志、参数配置
-- **极简 UI 设计** - 280px 紧凑窗口、现代黑白配色
+- **Human-like Browsing Simulation** - Multi-step smooth scrolling, random mouse movement, configurable dwell time
+- **Smart Browsing Management** - Automatic history recording, avoid duplicates, cross-page state persistence
+- **Quick Browse Mode** - Optionally skip comment browsing, browse more posts quickly (disabled by default)
+- **Real-time Monitoring Panel** - Browse statistics, activity logs, parameter configuration
+- **Minimalist UI Design** - Compact window, modern black & white color scheme
 
-### 快速开始
+## Quick Start
 
 ```bash
 git clone https://github.com/ymkiux/ldoSurfer.git
 cd ldoSurfer
 ```
 
-1. 打开 `chrome://extensions/`
-2. 启用「开发者模式」
-3. 点击「加载已解压的扩展程序」，选择项目文件夹
-4. 访问 https://linux.do 并登录
-5. 点击扩展图标启动
+1. Open `chrome://extensions/`
+2. Enable "Developer mode"
+3. Click "Load unpacked" and select the project folder
+4. Visit https://linux.do and log in
+5. Click the extension icon to start
 
-### 配置说明
+## Configuration
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| 停留时间 | 每个帖子的停留时长 | 5-15秒 |
-| 评论阅读 | 每条评论的阅读时长 | 1-4秒 |
-| 滚动深度 | 滚动到页面的深度比例 | 0.7 |
-| 点击概率 | 点击进入帖子的概率 | 0.6 |
-| 快速浏览模式 | 跳过评论，快速浏览帖子（停留5-10秒） | 关闭 |
+| Parameter | Description | Default Value |
+|-----------|-------------|---------------|
+| Dwell Time | Duration per post | 5-15 seconds |
+| Comment Read Time | Duration per comment | 1-4 seconds |
+| Scroll Depth | Page scroll depth ratio | 0.7 |
+| Click Probability | Probability to click into posts | 0.6 |
+| Quick Browse Mode | Skip comments, fast browse (5-10s dwell) | Disabled |
 
-### 技术栈
+## Tech Stack
 
 - Chrome Extension Manifest V3
 - Vanilla JavaScript (ES6+)
