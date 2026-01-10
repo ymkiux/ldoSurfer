@@ -163,14 +163,83 @@ class HumanBrowser {
   getPostComments() {
     // linux.do 使用 data-post-number 属性标识每个评论
     const comments = document.querySelectorAll('[data-post-number]');
-    return Array.from(comments);
+    return Array.from(comments)
+      // 按 postNumber 升序排序，确保顺序处理
+      .sort((a, b) => {
+        const numA = parseInt(a.getAttribute('data-post-number') || '0');
+        const numB = parseInt(b.getAttribute('data-post-number') || '0');
+        return numA - numB;
+      });
+  }
+
+  // 检查评论是否有未读标记（小蓝点）
+  checkCommentUnread(commentElement) {
+    // linux.do 可能的未读标记位置：
+    // 1. 评论内部的 .new-indicator 元素
+    // 2. 评论本身的 .unread 类
+    // 3. data-unread 属性
+    // 4. 评论时间旁边的未读图标
+    // 5. Discourse 的 new-user-posts 或 new-posts
+
+    // 方法1: 检查评论内是否有 .new-indicator
+    const newIndicator = commentElement.querySelector('.new-indicator');
+    if (newIndicator) {
+      return true;
+    }
+
+    // 方法2: 检查评论本身是否有 .unread 类
+    if (commentElement.classList.contains('unread')) {
+      return true;
+    }
+
+    // 方法3: 检查 data-unread 属性
+    if (commentElement.hasAttribute('data-unread') &&
+        commentElement.getAttribute('data-unread') !== 'false') {
+      return true;
+    }
+
+    // 方法4: 检查常见的未读图标类名（Discourse 常见）
+    const unreadBadge = commentElement.querySelector('.badge-notification.unread, .new-posts, .new-user-posts');
+    if (unreadBadge) {
+      return true;
+    }
+
+    // 方法5: 检查评论的父级是否有未读标记（有时标记在容器上）
+    const parent = commentElement.closest('.topic-post, .post, article');
+    if (parent) {
+      const parentUnread = parent.querySelector('.new-indicator, .badge-notification.unread, .new-posts, .new-user-posts');
+      if (parentUnread) {
+        return true;
+      }
+    }
+
+    // 方法6: 检查时间戳附近是否有未读标记（常见 Discourse 结构）
+    const postInfo = commentElement.querySelector('.post-info, .topic-meta, .map');
+    if (postInfo) {
+      const infoUnread = postInfo.querySelector('.new-posts, .unread, .new-indicator');
+      if (infoUnread) {
+        return true;
+      }
+    }
+
+    // 方法7: 检查评论ID链接是否有未读类
+    const postLink = commentElement.querySelector('a[href*="/p/"], .post-number');
+    if (postLink && (postLink.classList.contains('unread') ||
+                      postLink.querySelector('.unread, .new-indicator'))) {
+      return true;
+    }
+
+    return false;
   }
 
   // 逐个浏览评论（模拟人类阅读），支持动态加载
   async browseCommentsSlowly() {
+    // 记录最后浏览的评论 postNumber，而不是 index（更可靠）
+    let lastPostNumber = this.state.lastPostNumber || null;
     let lastCommentCount = 0;
     let noNewCommentsCount = 0;
-    const maxNoNewComments = 3; // 连续3次没有新评论才停止
+    const maxNoNewComments = 2; // 连续2次没有新评论就停止（减少等待）
+    let sameLocationCount = 0; // 检测是否卡在同一位置
 
     while (noNewCommentsCount < maxNoNewComments) {
       // 检查是否已停止或切换到快速模式
@@ -183,6 +252,30 @@ class HumanBrowser {
         return;
       }
 
+      // 检查是否离开了当前帖子（允许URL中添加页码，如 /t/topic/123 -> /t/topic/123/45）
+      const currentPath = window.location.pathname;
+      const currentTopicMatch = currentPath.match(/^\/t\/topic\/(\d+)/);
+      const originalTopicMatch = this.currentUrl.match(/^\/t\/topic\/(\d+)/);
+
+      if (currentTopicMatch && originalTopicMatch) {
+        // 都在帖子页面，检查帖子ID是否相同
+        if (currentTopicMatch[1] !== originalTopicMatch[1]) {
+          this.sendMessage({ type: 'log', message: `已切换到不同帖子 ${currentTopicMatch[1]}，停止浏览` });
+          return;
+        }
+        // 帖子ID相同，更新当前URL（允许页码变化）
+        if (currentPath !== this.currentUrl) {
+          this.currentUrl = currentPath;
+          this.sendMessage({ type: 'log', message: `URL更新为: ${currentPath}` });
+        }
+      } else {
+        // 不在帖子页面了
+        if (!currentPath.match(/^\/t\/topic\//)) {
+          this.sendMessage({ type: 'log', message: '已离开帖子页面，停止浏览' });
+          return;
+        }
+      }
+
       // 每次循环都重新获取评论（处理动态加载）
       const comments = this.getPostComments();
       const currentCount = comments.length;
@@ -193,8 +286,18 @@ class HumanBrowser {
         lastCommentCount = currentCount;
         noNewCommentsCount = 0;
 
-        // 从上次浏览的位置继续
-        const startIndex = this.state.lastCommentIndex || 0;
+        // 找到上次浏览位置的索引
+        let startIndex = 0;
+        if (lastPostNumber) {
+          for (let i = 0; i < comments.length; i++) {
+            if (comments[i].getAttribute('data-post-number') === lastPostNumber) {
+              startIndex = i + 1; // 从下一条开始
+              break;
+            }
+          }
+        }
+
+        this.sendMessage({ type: 'log', message: `从第 ${startIndex + 1} 条评论开始浏览` });
 
         for (let i = startIndex; i < comments.length; i++) {
           // 每次循环都检查状态和配置
@@ -210,9 +313,27 @@ class HumanBrowser {
           const comment = comments[i];
           const postNumber = comment.getAttribute('data-post-number');
 
-          // 滚动到评论位置
-          comment.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await this.sleep(500); // 等待滚动完成
+          // 检查是否已经处理过这条评论（防止倒退）
+          if (lastPostNumber && parseInt(postNumber) <= parseInt(lastPostNumber)) {
+            this.sendMessage({ type: 'log', message: `跳过评论 ${postNumber}` });
+            continue;
+          }
+
+          // 获取评论位置信息
+          const commentRect = comment.getBoundingClientRect();
+          const isVisible = commentRect.top < window.innerHeight && commentRect.bottom > 0;
+
+          this.sendMessage({ type: 'log', message: `浏览评论 ${postNumber}` });
+
+          // 只有当评论不可见时才滚动
+          if (!isVisible || commentRect.top < 100 || commentRect.top > window.innerHeight - 100) {
+            const targetY = window.scrollY + commentRect.top - window.innerHeight / 2;
+            window.scrollTo({
+              top: Math.max(0, targetY),
+              behavior: 'instant'
+            });
+            await this.sleep(300);
+          }
 
           // 滚动后再次检查状态
           if (!this.state.isRunning || this.config.quickMode) {
@@ -224,10 +345,35 @@ class HumanBrowser {
             return;
           }
 
+          // 等待未读标记渲染（关键修复：给页面时间渲染未读状态）
+          await this.sleep(1200);
+
+          // 再次检查状态（等待期间可能被停止）
+          if (!this.state.isRunning || this.config.quickMode) {
+            if (this.config.quickMode) {
+              this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
+            } else {
+              this.sendMessage({ type: 'log', message: '浏览已停止' });
+            }
+            return;
+          }
+
+          // 检查是否有未读标记（小蓝点）
+          const hasUnreadMarker = this.checkCommentUnread(comment);
+
+          if (!hasUnreadMarker) {
+            // 已读评论，跳过等待但仍标记为已处理
+            this.sendMessage({ type: 'log', message: `评论 ${postNumber} 已读` });
+            lastPostNumber = postNumber;
+            this.state.lastPostNumber = lastPostNumber;
+            await this.saveState(this.state);
+            continue;
+          }
+
           // 使用配置的阅读时间范围
           const readTime = this.random(this.config.minCommentRead, this.config.maxCommentRead);
 
-          this.sendMessage({ type: 'log', message: `阅读评论 ${postNumber}/${currentCount}` });
+          this.sendMessage({ type: 'log', message: `阅读评论 ${postNumber}/${currentCount} (${Math.round(readTime / 1000)}秒)` });
           await this.sleep(readTime);
 
           // 偶尔移动鼠标
@@ -236,38 +382,57 @@ class HumanBrowser {
           }
 
           // 保存当前浏览位置
-          this.state.lastCommentIndex = i + 1;
+          lastPostNumber = postNumber;
+          this.state.lastPostNumber = lastPostNumber;
+          await this.saveState(this.state);
         }
 
         // 浏览完当前所有评论后，尝试加载更多
         this.sendMessage({ type: 'log', message: '尝试加载更多评论...' });
 
-        // 滚动到页面底部触发加载
+        // 记录当前滚动位置
+        const beforeBottomScroll = window.scrollY;
+        const scrollHeight = document.body.scrollHeight;
+
+        // 小幅滚动到底部触发加载
         window.scrollTo({
-          top: document.body.scrollHeight,
-          behavior: 'smooth'
+          top: scrollHeight - window.innerHeight - 100,
+          behavior: 'instant'
         });
 
         // 等待可能的动态加载
-        await this.sleep(3000);
+        await this.sleep(2000);
+
+        // 检查是否有新内容加载
+        const newComments = this.getPostComments();
+        if (newComments.length <= currentCount) {
+          // 没有新内容，检测是否卡在同一位置
+          const afterScrollY = window.scrollY;
+          if (Math.abs(afterScrollY - beforeBottomScroll) < 50) {
+            sameLocationCount++;
+            if (sameLocationCount >= 2) {
+              this.sendMessage({ type: 'log', message: '检测到无法加载更多，停止' });
+              break;
+            }
+          }
+        } else {
+          sameLocationCount = 0;
+        }
 
       } else {
         // 没有新评论
         noNewCommentsCount++;
         this.sendMessage({ type: 'log', message: `等待新评论... (${noNewCommentsCount}/${maxNoNewComments})` });
 
-        // 再次滚动到底部尝试触发加载
-        window.scrollTo({
-          top: document.body.scrollHeight,
-          behavior: 'smooth'
-        });
-
-        await this.sleep(3000);
+        // 等待后再检查
+        await this.sleep(2000);
       }
     }
 
     // 重置浏览位置
+    this.state.lastPostNumber = null;
     this.state.lastCommentIndex = 0;
+    await this.saveState(this.state);
     this.sendMessage({ type: 'log', message: '所有评论已浏览完毕' });
   }
 
@@ -285,6 +450,11 @@ class HumanBrowser {
       }
       return;
     }
+
+    // 新帖子：重置浏览位置，确保从头开始
+    this.state.lastPostNumber = null;
+    this.state.lastCommentIndex = 0;
+    await this.saveState(this.state);
 
     // 添加到已浏览列表
     if (!this.state.browsedPosts.includes(postUrl)) {

@@ -78,6 +78,7 @@ class PopupController {
     document.getElementById('clearHistoryBtn').addEventListener('click', () => this.clearHistory());
     document.getElementById('applySettings').addEventListener('click', () => this.applySettings());
     document.getElementById('clearLogs').addEventListener('click', () => this.clearLogs());
+    document.getElementById('copyLogs').addEventListener('click', () => this.copyLogs());
     document.getElementById('openLatest').addEventListener('click', (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: 'https://linux.do/latest' });
@@ -298,6 +299,41 @@ class PopupController {
   clearLogs() {
     this.logs = [];
     this.renderLogs();
+  }
+
+  copyLogs() {
+    if (this.logs.length === 0) {
+      this.log('没有日志可复制', 'warning');
+      return;
+    }
+
+    // 将日志转换为文本格式
+    const logText = this.logs.map(log => {
+      return `[${log.timestamp}] ${log.message}`;
+    }).join('\n');
+
+    // 使用不需要授权的复制方式（临时 textarea）
+    const textarea = document.createElement('textarea');
+    textarea.value = logText;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      if (successful) {
+        this.log(`已复制 ${this.logs.length} 条日志`, 'success');
+      } else {
+        this.log('复制失败', 'error');
+      }
+    } catch (err) {
+      document.body.removeChild(textarea);
+      this.log('复制失败: ' + err.message, 'error');
+    }
   }
 
   saveSettings() {

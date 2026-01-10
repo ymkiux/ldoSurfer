@@ -369,6 +369,11 @@ body {
   color: var(--text-secondary);
 }
 
+.logs-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .btn-clear {
   padding: 2px 6px;
   font-size: 9px;
