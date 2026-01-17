@@ -8,109 +8,127 @@
 </head>
 <body>
   <div class="container">
-    <!-- 状态标签 -->
-    <div class="status-badge" id="statusBadge">
-      <span class="status-dot"></span>
-      <span class="status-text">未运行</span>
+    <!-- Tab 导航 -->
+    <div class="tab-nav" role="tablist">
+      <button class="tab-button active" data-tab="control" role="tab" aria-selected="true">控制中心</button>
+      <button class="tab-button" data-tab="stats" role="tab" aria-selected="false">数据统计</button>
     </div>
 
-    <!-- 副标题/统计 -->
-    <p class="subtitle">已浏览 <strong id="browsedCount">0</strong> 个帖子 · 运行 <strong id="runTime">00:00</strong></p>
+    <!-- 控制面板 -->
+    <div class="tab-panel active" data-panel="control" role="tabpanel">
+      <!-- 状态卡片 -->
+      <div class="status-area">
+        <div class="status-badge" id="statusBadge">
+          <span class="status-dot"></span>
+          <span class="status-text">未运行</span>
+        </div>
+        <p class="subtitle">已浏览 <strong id="browsedCount">0</strong> 帖 · 运行 <strong id="runTime">00:00</strong></p>
+      </div>
 
-    <!-- 主控制按钮 -->
-    <div class="main-actions">
-      <button id="startBtn" class="btn-primary">
-        继续浏览
-      </button>
-      <button id="stopBtn" class="btn-secondary" disabled>
-        停止
-      </button>
-    </div>
+      <!-- 主控制按钮 -->
+      <div class="main-actions">
+        <button id="startBtn" class="btn-primary">开始浏览</button>
+        <button id="stopBtn" class="btn-secondary" disabled>停止</button>
+      </div>
 
-    <!-- 次要操作 -->
-    <div class="secondary-actions">
-      <button id="resetBtn" class="btn-text">
-        重置并重新开始
-      </button>
-      <span class="divider">·</span>
-      <button id="clearHistoryBtn" class="btn-text">
-        清空历史
-      </button>
-    </div>
+      <!-- 次要操作 -->
+      <div class="secondary-actions">
+        <button id="resetBtn" class="btn-text">重置并重启</button>
+        <span class="divider">/</span>
+        <button id="clearHistoryBtn" class="btn-text">清空历史</button>
+      </div>
 
-    <!-- 设置面板 -->
-    <details class="settings" id="settingsPanel">
-      <summary>浏览设置</summary>
-      <div class="settings-grid">
-        <div class="setting-item">
-          <label>评论阅读</label>
-          <div class="input-group">
-            <input type="number" id="minCommentRead" value="1" min="0.5" max="10" step="0.5">
-            <span>-</span>
-            <input type="number" id="maxCommentRead" value="4" min="1" max="30" step="0.5">
-            <span class="unit">秒</span>
+      <!-- 滚动容器 (所有可变高度内容放这里) -->
+      <div class="scroll-container">
+        <!-- 设置面板 -->
+        <details class="settings settings-container" id="settingsPanel">
+          <summary>高级浏览设置</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label>阅读时长 (秒)</label>
+              <div class="input-group">
+                <input type="number" id="minCommentRead" value="1" step="0.5">
+                <span style="color:#ccc">-</span>
+                <input type="number" id="maxCommentRead" value="4" step="0.5">
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>页面停留 (秒)</label>
+              <div class="input-group">
+                <input type="number" id="minPageStay" value="5">
+                <span style="color:#ccc">-</span>
+                <input type="number" id="maxPageStay" value="15">
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>点击概率 (0-1)</label>
+              <div class="input-group">
+                <input type="number" id="clickProbability" value="0.6" step="0.1">
+              </div>
+            </div>
+            <div class="setting-item">
+              <label class="switch-label" style="padding:0">
+                <input type="checkbox" id="quickMode" class="switch-checkbox" style="width:30px;height:16px;">
+                <span class="switch-text">快速模式 (跳过评论)</span>
+              </label>
+            </div>
+            <button id="applySettings" class="btn-apply">应用并保存</button>
+          </div>
+        </details>
+
+        <!-- 日志区域 -->
+        <div class="logs-section">
+          <div class="logs-header">
+            <span>运行日志</span>
+            <div style="display:flex;gap:4px;">
+              <button id="copyLogs" class="btn-text" style="font-size:10px;padding:2px 6px;">复制</button>
+              <button id="clearLogs" class="btn-text" style="font-size:10px;padding:2px 6px;">清空</button>
+            </div>
+          </div>
+          <div class="logs-content" id="logsContent">
+            <div class="log-empty">
+              <div class="log-illustration" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="22"/>
+                  <line x1="8" y1="22" x2="16" y2="22"/>
+                </svg>
+              </div>
+              <span style="font-size:10px;margin-top:4px;">暂无活动</span>
+            </div>
           </div>
         </div>
-        <div class="setting-item">
-          <label>页面停留</label>
-          <div class="input-group">
-            <input type="number" id="minPageStay" value="5" min="1" max="60">
-            <span>-</span>
-            <input type="number" id="maxPageStay" value="15" min="2" max="120">
-            <span class="unit">秒</span>
-          </div>
-        </div>
-        <div class="setting-item">
-          <label>点击概率</label>
-          <div class="input-group">
-            <input type="number" id="clickProbability" value="0.6" min="0" max="1" step="0.1">
-          </div>
-        </div>
-        <div class="setting-item setting-item-full">
-          <label class="switch-label">
-            <input type="checkbox" id="quickMode" class="switch-checkbox">
-            <span class="switch-slider"></span>
-            <span class="switch-text">快速浏览模式（跳过评论，停留5-10秒）</span>
-          </label>
-        </div>
       </div>
-      <button id="applySettings" class="btn-apply">应用设置</button>
-    </details>
 
-    <!-- 日志区域 -->
-    <div class="logs-section">
-      <div class="logs-header">
-        <span>活动日志</span>
-        <div class="logs-actions">
-          <button id="copyLogs" class="btn-clear">复制</button>
-          <button id="clearLogs" class="btn-clear">清空</button>
-        </div>
-      </div>
-      <div class="logs-content" id="logsContent">
-        <div class="log-empty">
-          <div class="log-empty-text">暂无日志</div>
-          <div class="log-illustration" aria-hidden="true"></div>
+      <!-- 底部栏 -->
+      <div class="footer-bar">
+        <div style="display:flex;gap:12px;">
+          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
+          <a href="#" id="openLatest" class="footer-link">最新</a>
         </div>
       </div>
     </div>
 
-    <!-- 温馨模式开关 -->
-    <div class="cozy-toggle">
-      <label class="switch-label">
-        <input type="checkbox" id="cozyModeToggle" class="switch-checkbox">
-        <span class="switch-slider"></span>
-        <span class="switch-text">温馨模式</span>
-      </label>
-    </div>
+    <!-- 统计面板 -->
+    <div class="tab-panel" data-panel="stats" role="tabpanel">
+      <div class="scroll-container" id="statsContent">
+        <div class="stats-loading" style="text-align: center; padding: 40px; color: #999; font-size:12px;">
+          加载数据中...
+        </div>
+      </div>
 
-    <!-- 底部链接 -->
-    <div class="footer-links">
-      <a href="https://linux.do" target="_blank">LINUX DO</a>
-      <span>·</span>
-      <a href="#" id="openLatest">最新帖子</a>
+      <!-- 底部栏 (统计页) -->
+      <div class="footer-bar">
+        <div style="display:flex;gap:12px;">
+          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
+          <a href="#" id="openLatestStats" class="footer-link">最新</a>
+        </div>
+      </div>
     </div>
   </div>
 
+  <script src="statsModules.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

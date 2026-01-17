@@ -3,6 +3,20 @@
 
 const STORAGE_KEY = 'linux_do_auto_state';
 
+// 加载统计记录模块（异步加载，避免阻塞）
+let StatsRecorder = null;
+(async () => {
+  try {
+    const moduleUrl = chrome.runtime.getURL('statsRecorderModule.js');
+    // 使用动态 import 加载模块
+    const module = await import(moduleUrl);
+    StatsRecorder = module.StatsRecorder;
+    console.log('[Stats] 统计模块加载成功');
+  } catch (e) {
+    console.warn('[Stats] 统计模块加载失败:', e);
+  }
+})();
+
 class HumanBrowser {
   constructor() {
     this.currentUrl = window.location.href;
@@ -457,7 +471,8 @@ class HumanBrowser {
     await this.saveState(this.state);
 
     // 添加到已浏览列表
-    if (!this.state.browsedPosts.includes(postUrl)) {
+    const isNewPost = !this.state.browsedPosts.includes(postUrl);
+    if (isNewPost) {
       this.state.browsedPosts.push(postUrl);
       this.state.stats.totalBrowsed++;
     }
@@ -469,6 +484,7 @@ class HumanBrowser {
     this.randomMouseMove();
 
     // 快速浏览模式：跳过评论，停留5-10秒
+    let stayTime = 0; // 用于统计记录
     if (this.config.quickMode) {
       this.sendMessage({ type: 'log', message: '快速浏览模式：跳过评论' });
 
@@ -478,7 +494,7 @@ class HumanBrowser {
         return;
       }
 
-      const stayTime = this.random(5000, 10000);
+      stayTime = this.random(5000, 10000);
       this.sendMessage({ type: 'log', message: `停留阅读 ${Math.floor(stayTime / 1000)}秒` });
       await this.sleep(stayTime);
     } else {
@@ -492,7 +508,7 @@ class HumanBrowser {
       }
 
       // 停留阅读时间
-      const stayTime = this.random(this.config.minPageStay, this.config.maxPageStay);
+      stayTime = this.random(this.config.minPageStay, this.config.maxPageStay);
 
       // 在输出日志和 sleep 前再次检查
       if (!this.state.isRunning) {
@@ -521,6 +537,16 @@ class HumanBrowser {
 
     // 保存状态
     await this.saveState(this.state);
+
+    // 记录到统计数据（新增）
+    if (StatsRecorder && isNewPost) {
+      try {
+        // 使用停留时间作为浏览时长（包含评论阅读时间）
+        await StatsRecorder.record({ posts: 1, durationMs: stayTime, hasError: false });
+      } catch (e) {
+        console.warn('[Stats] 记录失败:', e);
+      }
+    }
 
     // 返回列表
     this.sendMessage({ type: 'log', message: '返回列表继续' });

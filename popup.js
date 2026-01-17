@@ -9,10 +9,9 @@ class PopupController {
       errors: 0,
       currentPost: null
     };
-    this.accumulatedTime = 0; // 累积运行时间（毫秒）
-    this.lastStartTime = null; // 最后一次开始时间
+    this.accumulatedTime = 0;
+    this.lastStartTime = null;
     this.logs = [];
-    this.cozyMode = false; // 温馨模式状态
     this.config = {
       minScrollDelay: 800,
       maxScrollDelay: 3000,
@@ -30,13 +29,15 @@ class PopupController {
     this.bindEvents();
     this.loadSettings();
     this.startTimer();
-    // 检查状态后更新UI
     this.checkStatus().then(() => {
       this.updateStatus();
     });
+    // 初始化统计模块
+    if (typeof statsTab !== 'undefined') {
+      statsTab.init();
+    }
   }
 
-  // 检查当前运行状态
   async checkStatus() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -44,28 +45,19 @@ class PopupController {
       return;
     }
 
-    // 获取存储的状态
     return new Promise((resolve) => {
       chrome.storage.local.get(['linux_do_auto_state'], (result) => {
         if (result.linux_do_auto_state) {
           const state = result.linux_do_auto_state;
-
-          // 同步运行状态
           this.isRunning = state.isRunning || false;
-
-          // 同步统计数据
           if (state.stats) {
             this.stats.totalBrowsed = state.stats.totalBrowsed || 0;
             this.stats.startTime = state.stats.startTime || null;
             this.stats.errors = state.stats.errors || 0;
           }
-
-          // 同步累积运行时间
           this.accumulatedTime = state.accumulatedTime || 0;
           this.lastStartTime = state.lastStartTime || null;
           this.updateStats();
-
-          console.log('[Popup] 恢复状态:', this.isRunning);
         }
         resolve();
       });
@@ -80,33 +72,44 @@ class PopupController {
     document.getElementById('applySettings').addEventListener('click', () => this.applySettings());
     document.getElementById('clearLogs').addEventListener('click', () => this.clearLogs());
     document.getElementById('copyLogs').addEventListener('click', () => this.copyLogs());
+    
     document.getElementById('openLatest').addEventListener('click', (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: 'https://linux.do/latest' });
     });
-    // 温馨模式开关
-    document.getElementById('cozyModeToggle').addEventListener('change', (e) => this.setCozyMode(e.target.checked));
-  }
+    const latestStats = document.getElementById('openLatestStats');
+    if (latestStats) {
+      latestStats.addEventListener('click', (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: 'https://linux.do/latest' });
+      });
+    }
 
-  // 设置温馨模式
-  setCozyMode(enabled) {
-    this.cozyMode = enabled;
-    document.body.classList.toggle('cozy-mode', enabled);
-    chrome.storage.local.set({ linuxDoCozyMode: enabled });
-    this.renderLogs(); // 重新渲染日志以显示/隐藏插画
+    // [交互增强] 监听设置面板展开事件，自动滚动到底部
+    const settingsPanel = document.getElementById('settingsPanel');
+    if (settingsPanel) {
+      settingsPanel.addEventListener('toggle', (e) => {
+        if (settingsPanel.open) {
+          // 给一点时间让浏览器渲染展开动画
+          setTimeout(() => {
+            // 平滑滚动到底部
+            window.scrollTo({
+              top: document.body.scrollHeight,
+              behavior: 'smooth'
+            });
+          }, 150);
+        }
+      });
+    }
   }
 
   async start() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     if (!tab.url || !tab.url.includes('linux.do')) {
       this.log('请在 linux.do 页面使用', 'error');
       return;
     }
-
-    // 发送启动消息到 content script，带重试
     this.sendMessageWithRetry(tab.id, { action: 'start' }, (response) => {
-      // 延迟检查：确保响应处理时没有同时执行停止操作
       if (response?.success && this.isRunning) {
         this.updateStatus();
         this.log('开始自动浏览', 'info');
@@ -114,12 +117,10 @@ class PopupController {
     });
   }
 
-  // 带重试的消息发送
   sendMessageWithRetry(tabId, message, callback, retries = 3) {
     chrome.tabs.sendMessage(tabId, message, (response) => {
       if (chrome.runtime.lastError) {
         if (retries > 0) {
-          // 等待后重试
           setTimeout(() => {
             this.sendMessageWithRetry(tabId, message, callback, retries - 1);
           }, 500);
@@ -134,7 +135,6 @@ class PopupController {
 
   async stop() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     this.sendMessageWithRetry(tab.id, { action: 'stop' }, (response) => {
       if (response?.success) {
         this.isRunning = false;
@@ -146,14 +146,11 @@ class PopupController {
 
   async resetAndStart() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     if (!tab.url || !tab.url.includes('linux.do')) {
       this.log('请在 linux.do 页面使用', 'error');
       return;
     }
-
     this.sendMessageWithRetry(tab.id, { action: 'resetAndStart' }, (response) => {
-      // 延迟检查：确保响应处理时没有同时执行停止操作
       if (response?.success && this.isRunning) {
         this.stats.totalBrowsed = 0;
         this.updateStatus();
@@ -165,7 +162,6 @@ class PopupController {
 
   async clearHistory() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     this.sendMessageWithRetry(tab.id, { action: 'resetHistory' }, (response) => {
       if (response?.success) {
         this.stats.totalBrowsed = 0;
@@ -176,19 +172,13 @@ class PopupController {
   }
 
   async applySettings() {
-    // 输入值是秒，转换为毫秒（确保 min < max）
     let minCommentRead = parseFloat(document.getElementById('minCommentRead').value) * 1000;
     let maxCommentRead = parseFloat(document.getElementById('maxCommentRead').value) * 1000;
     let minPageStay = parseInt(document.getElementById('minPageStay').value) * 1000;
     let maxPageStay = parseInt(document.getElementById('maxPageStay').value) * 1000;
 
-    // 确保 min < max
-    if (minCommentRead > maxCommentRead) {
-      [minCommentRead, maxCommentRead] = [maxCommentRead, minCommentRead];
-    }
-    if (minPageStay > maxPageStay) {
-      [minPageStay, maxPageStay] = [maxPageStay, minPageStay];
-    }
+    if (minCommentRead > maxCommentRead) [minCommentRead, maxCommentRead] = [maxCommentRead, minCommentRead];
+    if (minPageStay > maxPageStay) [minPageStay, maxPageStay] = [maxPageStay, minPageStay];
 
     const newConfig = {
       minScrollDelay: 800,
@@ -202,7 +192,6 @@ class PopupController {
       quickMode: document.getElementById('quickMode').checked
     };
 
-    // 验证设置
     if (newConfig.minCommentRead >= newConfig.maxCommentRead) {
       this.log('最小评论阅读时间必须小于最大评论阅读时间', 'error');
       return;
@@ -215,7 +204,6 @@ class PopupController {
     this.config = newConfig;
     this.saveSettings();
 
-    // 发送到 content script
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     chrome.tabs.sendMessage(tab.id, {
       action: 'updateConfig',
@@ -223,6 +211,10 @@ class PopupController {
     });
 
     this.log('设置已更新', 'info');
+    
+    // 应用后自动收起
+    const settingsPanel = document.getElementById('settingsPanel');
+    if (settingsPanel) settingsPanel.removeAttribute('open');
   }
 
   updateStatus() {
@@ -251,21 +243,16 @@ class PopupController {
   startTimer() {
     setInterval(() => {
       let totalTime = this.accumulatedTime;
-
-      // 只有在运行时才加上当前这次运行的时间
       if (this.isRunning && this.lastStartTime) {
         totalTime += Date.now() - this.lastStartTime;
       }
-
       const minutes = Math.floor(totalTime / 60000);
       const seconds = Math.floor((totalTime % 60000) / 1000);
-
       document.getElementById('runTime').textContent =
         `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }, 1000);
   }
 
-  // 保存运行时间状态
   saveRunTimeState() {
     chrome.storage.local.get(['linux_do_auto_state'], (result) => {
       const state = result.linux_do_auto_state || {};
@@ -276,54 +263,36 @@ class PopupController {
   }
 
   log(message, type = 'info') {
-    const timestamp = new Date().toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
+    const timestamp = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     this.logs.unshift({ message, type, timestamp });
-
-    // 最多保留 30 条日志
-    if (this.logs.length > 30) {
-      this.logs.pop();
-    }
-
+    if (this.logs.length > 30) this.logs.pop();
     this.renderLogs();
   }
 
   renderLogs() {
     const logsContent = document.getElementById('logsContent');
-
     if (this.logs.length === 0) {
       logsContent.innerHTML = `
         <div class="log-empty">
-          <div class="log-empty-text">暂无日志</div>
           <div class="log-illustration" aria-hidden="true">${this.getSquirrelSvg()}</div>
-        </div>
-      `;
+          <span style="font-size:10px;margin-top:4px;">暂无活动</span>
+        </div>`;
       return;
     }
-
     logsContent.innerHTML = this.logs.map(log => `
       <div class="log-entry log-${log.type}">
         <span class="log-time">${log.timestamp}</span>
-        <span class="log-message">${log.message}</span>
+        <span class="log-message" title="${log.message}">${log.message}</span>
       </div>
     `).join('');
   }
 
-  // 获取小松鼠 SVG
   getSquirrelSvg() {
-    return `<svg width="100" height="65" viewBox="0 0 140 90" fill="none" stroke="#c4b6a3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M78 22c12 4 24 12 27 22 3 9-2 22-16 22-14 0-26-11-26-24 0-10 7-18 15-20z"/>
-      <path d="M60 42c-10 2-20 12-20 24 0 12 10 20 24 20 10 0 18-6 18-14"/>
-      <path d="M86 32c6-4 10-10 10-16 0-6-4-11-10-11-6 0-10 5-10 11"/>
-      <path d="M54 54c-4 0-8 4-8 8 0 4 4 8 8 8h6"/>
-      <path d="M102 46c6-2 10-6 10-11 0-7-6-12-14-12"/>
-      <path d="M52 72c2 4 8 8 12 10"/>
-      <circle cx="86" cy="23" r="1.5" fill="#c4b6a3" stroke="none"/>
-      <path d="M90 58c-2 3-7 5-12 5"/>
-      <path d="M66 36c-2-6-10-10-18-10-6 0-12 2-16 6"/>
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="22"/>
+      <line x1="8" y1="22" x2="16" y2="22"/>
     </svg>`;
   }
 
@@ -333,83 +302,44 @@ class PopupController {
   }
 
   copyLogs() {
-    if (this.logs.length === 0) {
-      this.log('没有日志可复制', 'warning');
-      return;
-    }
-
-    // 将日志转换为文本格式
-    const logText = this.logs.map(log => {
-      return `[${log.timestamp}] ${log.message}`;
-    }).join('\n');
-
-    // 使用不需要授权的复制方式（临时 textarea）
+    if (this.logs.length === 0) return;
+    const logText = this.logs.map(log => `[${log.timestamp}] ${log.message}`).join('\n');
     const textarea = document.createElement('textarea');
     textarea.value = logText;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    textarea.style.left = '-9999px';
+    textarea.style.position = 'fixed'; textarea.style.opacity = '0';
     document.body.appendChild(textarea);
     textarea.select();
-
-    try {
-      const successful = document.execCommand('copy');
-      document.body.removeChild(textarea);
-
-      if (successful) {
-        this.log(`已复制 ${this.logs.length} 条日志`, 'success');
-      } else {
-        this.log('复制失败', 'error');
-      }
-    } catch (err) {
-      document.body.removeChild(textarea);
-      this.log('复制失败: ' + err.message, 'error');
-    }
+    try { document.execCommand('copy'); this.log('日志已复制', 'success'); } catch (err) {}
+    document.body.removeChild(textarea);
   }
 
-  saveSettings() {
-    chrome.storage.local.set({ linuxDoConfig: this.config });
-  }
+  saveSettings() { chrome.storage.local.set({ linuxDoConfig: this.config }); }
 
   loadSettings() {
-    chrome.storage.local.get(['linuxDoConfig', 'linuxDoCozyMode'], (result) => {
+    chrome.storage.local.get(['linuxDoConfig'], (result) => {
       if (result.linuxDoConfig) {
         this.config = result.linuxDoConfig;
-
-        // 更新 UI（转换为秒显示，确保小数显示在前面）
         const comment1 = (this.config.minCommentRead || 1000) / 1000;
         const comment2 = (this.config.maxCommentRead || 4000) / 1000;
         document.getElementById('minCommentRead').value = Math.min(comment1, comment2);
         document.getElementById('maxCommentRead').value = Math.max(comment1, comment2);
-
         const page1 = Math.floor((this.config.minPageStay || 5000) / 1000);
         const page2 = Math.floor((this.config.maxPageStay || 15000) / 1000);
         document.getElementById('minPageStay').value = Math.min(page1, page2);
         document.getElementById('maxPageStay').value = Math.max(page1, page2);
-
         document.getElementById('clickProbability').value = this.config.clickProbability;
         document.getElementById('quickMode').checked = this.config.quickMode || false;
       }
-
-      // 加载温馨模式状态
-      const cozyMode = Boolean(result.linuxDoCozyMode);
-      document.getElementById('cozyModeToggle').checked = cozyMode;
-      this.setCozyMode(cozyMode);
     });
   }
 }
 
-// 创建控制器
 const controller = new PopupController();
 
-// 监听来自 content script 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.source === 'content') {
     switch (message.type) {
-      case 'ready':
-        console.log('[Popup] Content script ready');
-        break;
-
+      case 'ready': console.log('[Popup] Ready'); break;
       case 'started':
         controller.isRunning = true;
         controller.stats.startTime = Date.now();
@@ -418,10 +348,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         controller.updateStatus();
         controller.log('自动浏览已启动', 'success');
         break;
-
       case 'stopped':
         controller.isRunning = false;
-        // 累积本次运行时间
         if (controller.lastStartTime) {
           controller.accumulatedTime += Date.now() - controller.lastStartTime;
           controller.lastStartTime = null;
@@ -430,26 +358,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         controller.updateStatus();
         controller.log('自动浏览已停止', 'warning');
         break;
-
       case 'stats':
         controller.stats = { ...controller.stats, ...message.stats };
         controller.updateStats();
         break;
-
-      case 'log':
-        controller.log(message.message, 'info');
-        break;
-
-      case 'error':
-        controller.log(message.message, 'error');
-        controller.stats.errors++;
-        break;
-
-      case 'configUpdated':
-        controller.log('浏览配置已更新', 'info');
-        break;
+      case 'log': controller.log(message.message, 'info'); break;
+      case 'error': controller.log(message.message, 'error'); controller.stats.errors++; break;
+      case 'configUpdated': controller.log('配置已更新', 'info'); break;
     }
   }
-
   return true;
 });

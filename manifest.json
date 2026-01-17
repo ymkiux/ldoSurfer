@@ -29,5 +29,11 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["statsRecorderModule.js"],
+      "matches": ["https://linux.do/*"]
+    }
   ]
 }
