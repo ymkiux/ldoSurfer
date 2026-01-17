@@ -567,18 +567,21 @@ body {
   position: relative;
   cursor: pointer;
   transition: background 0.3s;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 0;
 }
 
 .switch-checkbox::after {
   content: '';
   position: absolute;
-  top: 50%;
+  top: 2px;
   left: 2px;
   width: 16px;
   height: 16px;
   background: #fff;
   border-radius: 50%;
-  transform: translateY(-50%);
+  transform: translateX(0);
   transition: transform 0.3s cubic-bezier(0.3, 1.5, 0.7, 1);
   box-shadow: var(--shadow-inner);
 }
@@ -588,7 +591,7 @@ body {
 }
 
 .switch-checkbox:checked::after {
-  transform: translateY(-50%) translateX(14px);
+  transform: translateX(14px);
 }
 
 .footer-link {
