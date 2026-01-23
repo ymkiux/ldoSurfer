@@ -612,8 +612,18 @@ class HumanBrowser {
     window.location.href = url;
   }
 
-  navigateToLatest() {
-    window.location.href = 'https://linux.do/latest';
+  async navigateToLatest() {
+    const baseUrl = await this.getCurrentBaseUrl();
+    window.location.href = `${baseUrl}/latest`;
+  }
+
+  async getCurrentBaseUrl() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['useIdcflareSite'], (result) => {
+        const useIdcflare = result.useIdcflareSite || false;
+        resolve(useIdcflare ? 'https://idcflare.com' : 'https://linux.do');
+      });
+    });
   }
 
   // 开始浏览（不清空历史记录）

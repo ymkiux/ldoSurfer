@@ -63,6 +63,12 @@ class ThemeManager {
     if (persist) {
       chrome.storage.local.set({ [this.storageKey]: targetId });
     }
+
+    // 重新渲染统计页面的图表以应用新主题颜色
+    const statsPanel = document.querySelector('[data-panel="stats"]');
+    if (statsPanel && statsPanel.classList.contains('active') && typeof statsTab !== 'undefined') {
+      statsTab._renderStats();
+    }
   }
 
   isSupported(themeId) {
@@ -85,6 +91,81 @@ class ThemeManager {
 
   closePanel() {
     this.panelEl?.setAttribute('hidden', '');
+  }
+}
+
+class SiteManager {
+  constructor() {
+    this.storageKey = 'useIdcflareSite';
+    this.useIdcflare = false;
+    this.checkboxEl = null;
+  }
+
+  async init() {
+    this.checkboxEl = document.getElementById('useIdcflareSite');
+    if (!this.checkboxEl) return;
+
+    const data = await this.loadFromStorage();
+    this.useIdcflare = data || false;
+    this.updateUI();
+    this.bindEvents();
+  }
+
+  getBaseUrl() {
+    return this.useIdcflare ? 'https://idcflare.com' : 'https://linux.do';
+  }
+
+  getLatestUrl() {
+    return `${this.getBaseUrl()}/latest`;
+  }
+
+  isCurrentSite(tabUrl) {
+    if (this.useIdcflare) {
+      return /idcflare\.com/.test(tabUrl);
+    }
+    return /linux\.do/.test(tabUrl);
+  }
+
+  getSiteName() {
+    return this.useIdcflare ? 'IDCFlare' : 'Linux DO';
+  }
+
+  async toggle(value) {
+    this.useIdcflare = value;
+    await this.saveToStorage();
+    this.updateUI();
+  }
+
+  updateUI() {
+    const nameEl = document.getElementById('currentSiteName');
+    if (nameEl) {
+      nameEl.textContent = this.getSiteName();
+    }
+    if (this.checkboxEl) {
+      this.checkboxEl.checked = this.useIdcflare;
+    }
+  }
+
+  bindEvents() {
+    this.checkboxEl.addEventListener('change', (e) => {
+      this.toggle(e.target.checked);
+    });
+  }
+
+  async loadFromStorage() {
+    return new Promise(resolve => {
+      chrome.storage.local.get([this.storageKey], (result) => {
+        resolve(result[this.storageKey]);
+      });
+    });
+  }
+
+  async saveToStorage() {
+    return new Promise(resolve => {
+      chrome.storage.local.set({
+        [this.storageKey]: this.useIdcflare
+      }, resolve);
+    });
   }
 }
 
@@ -111,11 +192,13 @@ class PopupController {
     };
 
     this.themeManager = new ThemeManager();
+    this.siteManager = new SiteManager();
     this.init();
   }
 
   init() {
     this.themeManager.init();
+    this.siteManager.init();
     this.bindEvents();
     this.loadSettings();
     this.startTimer();
@@ -131,7 +214,7 @@ class PopupController {
   async checkStatus() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    if (!tab.url || !tab.url.includes('linux.do')) {
+    if (!tab.url || !this.siteManager.isCurrentSite(tab.url)) {
       return;
     }
 
@@ -165,13 +248,13 @@ class PopupController {
     
     document.getElementById('openLatest').addEventListener('click', (e) => {
       e.preventDefault();
-      chrome.tabs.create({ url: 'https://linux.do/latest' });
+      chrome.tabs.create({ url: this.siteManager.getLatestUrl() });
     });
     const latestStats = document.getElementById('openLatestStats');
     if (latestStats) {
       latestStats.addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: 'https://linux.do/latest' });
+        chrome.tabs.create({ url: this.siteManager.getLatestUrl() });
       });
     }
 
@@ -195,8 +278,8 @@ class PopupController {
 
   async start() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.url || !tab.url.includes('linux.do')) {
-      this.log('请在 linux.do 页面使用', 'error');
+    if (!tab.url || !this.siteManager.isCurrentSite(tab.url)) {
+      this.log(`请在 ${this.siteManager.getSiteName()} 页面使用`, 'error');
       return;
     }
     this.sendMessageWithRetry(tab.id, { action: 'start' }, (response) => {
@@ -236,8 +319,8 @@ class PopupController {
 
   async resetAndStart() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.url || !tab.url.includes('linux.do')) {
-      this.log('请在 linux.do 页面使用', 'error');
+    if (!tab.url || !this.siteManager.isCurrentSite(tab.url)) {
+      this.log(`请在 ${this.siteManager.getSiteName()} 页面使用`, 'error');
       return;
     }
     this.sendMessageWithRetry(tab.id, { action: 'resetAndStart' }, (response) => {
@@ -457,5 +540,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'configUpdated': controller.log('配置已更新', 'info'); break;
     }
   }
+
   return true;
 });

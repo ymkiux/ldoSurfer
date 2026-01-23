@@ -265,6 +265,26 @@ body {
 }
 
 /* ---------------- 组件：主题切换 ---------------- */
+.site-name {
+  position: fixed;
+  right: 52px;
+  bottom: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  background: var(--bg-input);
+  padding: 6px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--input-border);
+  box-shadow: var(--shadow-inner);
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  pointer-events: none;
+}
+
 .theme-switcher {
   position: fixed;
   right: 12px;
@@ -534,6 +554,8 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 8px;
+  cursor: default;
+  user-select: none;
 }
 
 .status-badge.running {
@@ -549,6 +571,8 @@ body {
 .subtitle {
   font-size: 12px;
   color: var(--text-tertiary);
+  cursor: default;
+  user-select: none;
 }
 .subtitle strong { color: var(--text-primary); font-weight: 700; margin: 0 2px; }
 
@@ -695,10 +719,12 @@ body {
   margin-bottom: 12px;
 }
 
-.setting-item label { 
-  font-size: 12px; 
-  color: var(--text-secondary); 
+.setting-item label {
+  font-size: 12px;
+  color: var(--text-secondary);
   font-weight: 500;
+  cursor: default;
+  user-select: none;
 }
 
 .input-group { 
@@ -810,6 +836,8 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--color-divider);
+  cursor: default;
+  user-select: none;
 }
 
 .logs-content {
@@ -835,6 +863,8 @@ body {
   gap: 8px;
   margin-bottom: 4px;
   line-height: 1.4;
+  cursor: default;
+  user-select: none;
 }
 .log-time { color: var(--text-tertiary); min-width: 36px; }
 .log-message { color: var(--text-secondary); }
@@ -936,6 +966,8 @@ body {
   flex-direction: column;
   justify-content: center;
   border: 1px solid var(--input-border);
+  cursor: default;
+  user-select: none;
 }
 
 .overview-value {
@@ -966,4 +998,16 @@ body {
   margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
+  cursor: default;
+  user-select: none;
+}
+
+/* 禁用 SVG 内文本的光标选择 */
+.chart-section svg {
+  cursor: default;
+}
+
+.chart-section svg text {
+  cursor: default;
+  user-select: none;
 }

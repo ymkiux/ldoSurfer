@@ -225,16 +225,41 @@ class StatsAggregator {
 // ============== statsCharts.js ==============
 class StatsCharts {
   static getPalette() {
+    const style = getComputedStyle(document.body);
+    const accent = style.getPropertyValue('--accent').trim() || '#3370ff';
+    const textPrimary = style.getPropertyValue('--text-primary').trim() || '#1f2329';
+    const textTertiary = style.getPropertyValue('--text-tertiary').trim() || '#8f959e';
+    const bgCard = style.getPropertyValue('--bg-card').trim() || '#ffffff';
+    const colorDivider = style.getPropertyValue('--color-divider').trim() || '#f0f1f5';
+
+    // 将主题色转换为 rgba 以实现半透明效果
+    const hexToRgba = (hex, alpha) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    // 计算热力图中间色（主题色的低饱和度版本）
+    const getMidColor = (baseColor) => {
+      const r = parseInt(baseColor.slice(1, 3), 16);
+      const g = parseInt(baseColor.slice(3, 5), 16);
+      const b = parseInt(baseColor.slice(5, 7), 16);
+      // 混合 60% 的白色
+      const blend = (c) => Math.round(c + (255 - c) * 0.6);
+      return `rgb(${blend(r)}, ${blend(g)}, ${blend(b)})`;
+    };
+
     return {
-      bg: '#ffffff',
-      text: '#1f2329',
-      textMuted: '#8f959e',
-      line: '#3370ff',
-      fill: 'rgba(51, 112, 255, 0.1)',
-      grid: '#f0f1f5',
-      heatLow: '#f0f1f5',
-      heatMid: '#94b5ff',
-      heatHigh: '#3370ff'
+      bg: bgCard,
+      text: textPrimary,
+      textMuted: textTertiary,
+      line: accent,
+      fill: hexToRgba(accent, 0.1),
+      grid: colorDivider,
+      heatLow: colorDivider,
+      heatMid: getMidColor(accent),
+      heatHigh: accent
     };
   }
 

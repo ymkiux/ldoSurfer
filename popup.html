@@ -72,6 +72,12 @@
                 <span class="switch-text">快速模式 (跳过评论)</span>
               </label>
             </div>
+            <div class="setting-item">
+              <label class="switch-label" style="padding:0">
+                <input type="checkbox" id="useIdcflareSite" class="switch-checkbox">
+                <span class="switch-text">切换到 IDCFlare</span>
+              </label>
+            </div>
             <button id="applySettings" class="btn-apply">应用并保存</button>
           </div>
         </details>
@@ -126,6 +132,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 站名显示（主题按钮左侧） -->
+    <span id="currentSiteName" class="site-name">Linux DO</span>
 
     <!-- 主题切换入口（固定底部） -->
     <button id="openThemePanel" class="theme-switcher theme-open" aria-haspopup="dialog" aria-controls="themePanel" aria-label="选择主题">

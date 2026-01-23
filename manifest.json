@@ -8,7 +8,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://linux.do/*"
+    "https://linux.do/*",
+    "https://idcflare.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -25,7 +26,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://linux.do/*"],
+      "matches": ["https://linux.do/*", "https://idcflare.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
@@ -33,7 +34,7 @@
   "web_accessible_resources": [
     {
       "resources": ["statsRecorderModule.js"],
-      "matches": ["https://linux.do/*"]
+      "matches": ["https://linux.do/*", "https://idcflare.com/*"]
     }
   ]
 }
