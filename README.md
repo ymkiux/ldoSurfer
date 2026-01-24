@@ -13,6 +13,8 @@
 
 ---
 
+[中文版](README.zh.md) · English
+
 ## Overview
 
 ldoSurfer is a Chrome browser extension that automatically browses linux.do community posts by simulating real human browsing behavior (smooth scrolling, random dwell time, mouse movement, etc.).
@@ -49,6 +51,33 @@ cd ldoSurfer
 | Scroll Depth | Page scroll depth ratio | 0.7 |
 | Click Probability | Probability to click into posts | 0.6 |
 | Quick Browse Mode | Skip comments, fast browse (5-10s dwell) | Disabled |
+
+## Usage Guide
+
+### Interface Overview
+
+| Feature | Location | Description |
+|---------|----------|-------------|
+| Start/Stop | Control Panel (top) | Main toggle to start/pause auto browsing |
+| Browse Stats | Control Panel (top) | Shows browsed posts count and running time |
+| Advanced Settings | Click "Advanced Browse Settings" | Adjust read time, dwell time, click probability, etc. |
+| Activity Logs | Control Panel (bottom) | Real-time browsing activity, supports copy/clear |
+| Data Statistics | Click "Data Statistics" tab | View history and chart analysis |
+| Theme Switcher | Bottom palette icon | Switch between Default/Healing/New Year themes |
+| Site Switcher | "Switch to IDCFlare" in settings | Support both linux.do and idcflare.cn sites |
+
+### Steps to Use
+
+1. **Install & Login**: Load the extension and visit the target site, then log in
+2. **Adjust Settings**: Expand "Advanced Browse Settings" to configure as needed
+3. **Start Browsing**: Click the "Start Browsing" button
+4. **View Data**: Switch to "Data Statistics" tab to view history
+
+### Notes
+
+- Ensure you are logged in to the corresponding site before switching
+- Quick mode skips comments and only browses post content
+- History is automatically saved, persists across browser sessions
 
 ## Tech Stack
 
