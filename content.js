@@ -2,6 +2,15 @@
 // 使用持久化存储，支持页面跳转后继续运行
 
 const STORAGE_KEY = 'linux_do_auto_state';
+const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
+const DEFAULT_DAILY_AUTO = {
+  enabled: true,
+  target: 50,
+  time: '09:00',
+  date: '',
+  count: 0,
+  running: false
+};
 
 // 加载统计记录模块（异步加载，避免阻塞）
 let StatsRecorder = null;
@@ -32,6 +41,7 @@ class HumanBrowser {
       clickProbability: 0.6,
       quickMode: false
     };
+    this.dailyAuto = { ...DEFAULT_DAILY_AUTO };
 
     this.init();
   }
@@ -64,6 +74,78 @@ class HumanBrowser {
     });
   }
 
+  getTodayString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  normalizeDailyAuto(raw) {
+    const today = this.getTodayString();
+    const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
+    if (config.date !== today) {
+      config.date = today;
+      config.count = 0;
+      config.running = false;
+    }
+    if (!config.target || config.target < 1) {
+      config.target = DEFAULT_DAILY_AUTO.target;
+    }
+    return config;
+  }
+
+  async loadDailyAuto() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+        const stored = result[DAILY_AUTO_KEY];
+        const normalized = this.normalizeDailyAuto(stored);
+        if (!stored) {
+          chrome.storage.local.set({ [DAILY_AUTO_KEY]: normalized }, () => resolve(normalized));
+          return;
+        }
+        resolve(normalized);
+      });
+    });
+  }
+
+  async saveDailyAuto(config) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [DAILY_AUTO_KEY]: config }, () => resolve());
+    });
+  }
+
+  isDailyAutoRunning() {
+    return this.dailyAuto?.running === true;
+  }
+
+  isQuickModeEnabled() {
+    return this.config.quickMode && !this.isDailyAutoRunning();
+  }
+
+  async updateDailyAutoProgress(isNewPost) {
+    if (!this.isDailyAutoRunning()) return false;
+    if (isNewPost) {
+      this.dailyAuto.count += 1;
+    }
+    await this.saveDailyAuto(this.dailyAuto);
+    if (this.dailyAuto.count >= this.dailyAuto.target) {
+      await this.finishDailyAuto();
+      return true;
+    }
+    return false;
+  }
+
+  async finishDailyAuto() {
+    this.dailyAuto.running = false;
+    await this.saveDailyAuto(this.dailyAuto);
+    this.state.isRunning = false;
+    await this.saveState(this.state);
+    this.sendMessage({ type: 'log', message: '每日任务完成，已停止' });
+    this.sendMessage({ type: 'stopped' });
+  }
+
   // 清除状态
   async clearState() {
     return new Promise((resolve) => {
@@ -78,6 +160,7 @@ class HumanBrowser {
     const state = await this.loadState();
     this.state = state;
     this.config = state.config || this.config;
+    this.dailyAuto = await this.loadDailyAuto();
 
     console.log('[Linux DO Auto] 状态加载完成', {
       isRunning: state.isRunning,
@@ -257,8 +340,8 @@ class HumanBrowser {
 
     while (noNewCommentsCount < maxNoNewComments) {
       // 检查是否已停止或切换到快速模式
-      if (!this.state.isRunning || this.config.quickMode) {
-        if (this.config.quickMode) {
+      if (!this.state.isRunning || this.isQuickModeEnabled()) {
+        if (this.isQuickModeEnabled()) {
           this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
         } else {
           this.sendMessage({ type: 'log', message: '浏览已停止' });
@@ -315,8 +398,8 @@ class HumanBrowser {
 
         for (let i = startIndex; i < comments.length; i++) {
           // 每次循环都检查状态和配置
-          if (!this.state.isRunning || this.config.quickMode) {
-            if (this.config.quickMode) {
+          if (!this.state.isRunning || this.isQuickModeEnabled()) {
+            if (this.isQuickModeEnabled()) {
               this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
             } else {
               this.sendMessage({ type: 'log', message: '浏览已停止' });
@@ -350,8 +433,8 @@ class HumanBrowser {
           }
 
           // 滚动后再次检查状态
-          if (!this.state.isRunning || this.config.quickMode) {
-            if (this.config.quickMode) {
+          if (!this.state.isRunning || this.isQuickModeEnabled()) {
+            if (this.isQuickModeEnabled()) {
               this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
             } else {
               this.sendMessage({ type: 'log', message: '浏览已停止' });
@@ -363,8 +446,8 @@ class HumanBrowser {
           await this.sleep(1200);
 
           // 再次检查状态（等待期间可能被停止）
-          if (!this.state.isRunning || this.config.quickMode) {
-            if (this.config.quickMode) {
+          if (!this.state.isRunning || this.isQuickModeEnabled()) {
+            if (this.isQuickModeEnabled()) {
               this.sendMessage({ type: 'log', message: '检测到快速模式，停止浏览评论' });
             } else {
               this.sendMessage({ type: 'log', message: '浏览已停止' });
@@ -485,7 +568,7 @@ class HumanBrowser {
 
     // 快速浏览模式：跳过评论，停留5-10秒
     let stayTime = 0; // 用于统计记录
-    if (this.config.quickMode) {
+    if (this.isQuickModeEnabled()) {
       this.sendMessage({ type: 'log', message: '快速浏览模式：跳过评论' });
 
       // 检查是否已停止（在输出日志后、sleep前检查）
@@ -548,6 +631,9 @@ class HumanBrowser {
       }
     }
 
+    const dailyDone = await this.updateDailyAutoProgress(isNewPost);
+    if (dailyDone) return;
+
     // 返回列表
     this.sendMessage({ type: 'log', message: '返回列表继续' });
     if (this.state.isRunning) {
@@ -562,6 +648,11 @@ class HumanBrowser {
     // 检查是否还在运行
     if (!this.state.isRunning) {
       this.sendMessage({ type: 'log', message: '已停止' });
+      return;
+    }
+
+    if (this.isDailyAutoRunning() && this.dailyAuto.count >= this.dailyAuto.target) {
+      await this.finishDailyAuto();
       return;
     }
 
@@ -627,6 +718,20 @@ class HumanBrowser {
   }
 
   // 开始浏览（不清空历史记录）
+  async startDaily(target, date) {
+    this.dailyAuto = await this.loadDailyAuto();
+    if (!this.dailyAuto.enabled) {
+      this.sendMessage({ type: 'log', message: '每日自动浏览已关闭' });
+      return;
+    }
+    const today = this.getTodayString();
+    this.dailyAuto.date = date || today;
+    this.dailyAuto.count = 0;
+    this.dailyAuto.target = target || this.dailyAuto.target || DEFAULT_DAILY_AUTO.target;
+    this.dailyAuto.running = true;
+    await this.saveDailyAuto(this.dailyAuto);
+    await this.start();
+  }
   async start() {
     console.log('[Linux DO Auto] 开始浏览，保留历史记录');
 
@@ -680,6 +785,10 @@ class HumanBrowser {
 
     this.state.isRunning = false;
     await this.saveState(this.state);
+    if (this.isDailyAutoRunning()) {
+      this.dailyAuto.running = false;
+      await this.saveDailyAuto(this.dailyAuto);
+    }
 
     this.sendMessage({ type: 'stopped' });
     console.log('[Linux DO Auto] 停止完成');
@@ -738,6 +847,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'stop':
       browser.stop().then(() => sendResponse({ success: true }));
+      break;
+
+    case 'startDaily':
+      browser.startDaily(message.target, message.date).then(() => sendResponse({ success: true }));
       break;
 
     case 'getConfig':

@@ -78,6 +78,18 @@
                 <span class="switch-text">切换到 IDCFlare</span>
               </label>
             </div>
+            <div class="setting-item">
+              <label class="switch-label" style="padding:0">
+                <input type="checkbox" id="dailyAutoEnabled" class="switch-checkbox">
+                <span class="switch-text">每日自动浏览 50 帖 (默认 09:00)</span>
+              </label>
+            </div>
+            <div class="setting-item">
+              <label>每日开始时间</label>
+              <div class="input-group">
+                <input type="time" id="dailyAutoTime" value="09:00" step="60">
+              </div>
+            </div>
             <button id="applySettings" class="btn-apply">应用并保存</button>
           </div>
         </details>

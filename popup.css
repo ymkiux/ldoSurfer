@@ -748,6 +748,10 @@ body {
   box-shadow: var(--shadow-inner);
 }
 
+.input-group input[type=time] {
+  width: 88px;
+}
+
 /* 数字输入框调节器样式适配 */
 .input-group input::-webkit-inner-spin-button {
   opacity: 1;

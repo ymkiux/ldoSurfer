@@ -5,6 +5,15 @@ const AVAILABLE_THEMES = [
   { id: 'healing', name: '治愈' },
   { id: 'newyear', name: '新年' }
 ];
+const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
+const DEFAULT_DAILY_AUTO = {
+  enabled: true,
+  target: 50,
+  time: '09:00',
+  date: '',
+  count: 0,
+  running: false
+};
 
 class ThemeManager {
   constructor() {
@@ -181,6 +190,8 @@ class PopupController {
     this.accumulatedTime = 0;
     this.lastStartTime = null;
     this.logs = [];
+    this.dailyAutoToggleEl = null;
+    this.dailyAutoTimeEl = null;
     this.config = {
       minScrollDelay: 800,
       maxScrollDelay: 3000,
@@ -200,6 +211,7 @@ class PopupController {
     this.themeManager.init();
     this.siteManager.init();
     this.bindEvents();
+    this.initDailyAutoToggle();
     this.loadSettings();
     this.startTimer();
     this.checkStatus().then(() => {
@@ -484,6 +496,62 @@ class PopupController {
     textarea.select();
     try { document.execCommand('copy'); this.log('日志已复制', 'success'); } catch (err) {}
     document.body.removeChild(textarea);
+  }
+
+  initDailyAutoToggle() {
+    this.dailyAutoToggleEl = document.getElementById('dailyAutoEnabled');
+    this.dailyAutoTimeEl = document.getElementById('dailyAutoTime');
+    if (!this.dailyAutoToggleEl || !this.dailyAutoTimeEl) return;
+    this.loadDailyAutoConfig();
+    this.dailyAutoToggleEl.addEventListener('change', (e) => {
+      this.saveDailyAutoConfig(e.target.checked);
+    });
+    this.dailyAutoTimeEl.addEventListener('change', (e) => {
+      this.saveDailyAutoTime(e.target.value);
+    });
+  }
+
+  loadDailyAutoConfig() {
+    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
+      this.dailyAutoToggleEl.checked = config.enabled !== false;
+      this.dailyAutoTimeEl.value = this.normalizeDailyTime(config.time);
+      if (!result[DAILY_AUTO_KEY]) {
+        chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
+      }
+    });
+  }
+
+  normalizeDailyTime(time) {
+    if (!time || typeof time !== 'string') return '09:00';
+    const parts = time.split(':');
+    if (parts.length !== 2) return '09:00';
+    const hour = Number(parts[0]);
+    const minute = Number(parts[1]);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute)) return '09:00';
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return '09:00';
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  saveDailyAutoTime(time) {
+    const normalized = this.normalizeDailyTime(time);
+    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
+      config.time = normalized;
+      chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
+    });
+  }
+
+  saveDailyAutoConfig(enabled) {
+    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
+      config.enabled = enabled;
+      config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
+      if (!enabled) {
+        config.running = false;
+      }
+      chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
+    });
   }
 
   saveSettings() { chrome.storage.local.set({ linuxDoConfig: this.config }); }
