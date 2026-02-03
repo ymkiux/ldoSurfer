@@ -54,6 +54,10 @@ cd ldoSurfer
 
 ## Usage Guide
 
+### Prerequisite
+
+- All actions only work when you are currently on `linux.do` or `idcflare.com` pages. Otherwise buttons do nothing.
+
 ### Interface Overview
 
 | Feature | Location | Description |
@@ -64,7 +68,7 @@ cd ldoSurfer
 | Activity Logs | Control Panel (bottom) | Real-time browsing activity, supports copy/clear |
 | Data Statistics | Click "Data Statistics" tab | View history and chart analysis |
 | Theme Switcher | Bottom palette icon | Switch between Default/Healing/New Year themes |
-| Site Switcher | "Switch to IDCFlare" in settings | Support both linux.do and idcflare.cn sites |
+| Site Switcher | Inside "Advanced Browse Settings" | Support both linux.do and idcflare.com sites |
 
 ### Steps to Use
 
@@ -72,6 +76,26 @@ cd ldoSurfer
 2. **Adjust Settings**: Expand "Advanced Browse Settings" to configure as needed
 3. **Start Browsing**: Click the "Start Browsing" button
 4. **View Data**: Switch to "Data Statistics" tab to view history
+
+### Switch Site
+
+1. Open the extension popup
+2. Expand **Advanced Browse Settings**
+3. Use **Site Switcher** to select Linux DO / IDCFlare
+4. Click **Open Latest** to confirm the current site
+
+### Daily Schedule (Auto Browse)
+
+Location: **Advanced Browse Settings**
+
+1. Open the extension popup and expand **Advanced Browse Settings**
+2. Enable **Daily Auto Browse**
+3. Set the daily time (HH:MM)
+4. At the scheduled time, the extension opens `/latest` and starts browsing automatically
+
+**Notes**
+- The toggle must be enabled; disabling it cancels the schedule
+- You must be on linux.do or idcflare.com for actions to work
 
 ### Notes
 
