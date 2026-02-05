@@ -1051,30 +1051,96 @@ body {
 
 /* ---------------- 邀请榜单 ---------------- */
 .invites-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title controls"
+    "status controls";
+  gap: 6px 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--color-divider);
+}
+
+.invites-controls {
+  grid-area: controls;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.invites-select {
+  height: 28px;
+  line-height: 28px;
+  border: 1px solid var(--color-divider);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 10px;
+  padding: 0 8px;
+}
+
+.invites-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  font-size: 10px;
+  color: var(--text-primary);
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--color-divider);
+  background: var(--bg-card);
+}
+
+.invites-filter input {
+  accent-color: var(--accent);
+}
+
+.invites-refresh {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-divider);
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.invites-refresh:hover {
+  background: var(--btn-secondary-hover);
 }
 
 .invites-title {
+  grid-area: title;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
-.invites-subtitle {
+.invites-status {
+  grid-area: status;
   font-size: 10px;
   color: var(--text-tertiary);
-  margin-top: 2px;
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
 }
 
 .invites-body {
-  background: var(--bg-card);
-  border-radius: var(--radius-m);
-  padding: 12px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--input-border);
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  border: none;
   overflow-x: auto;
 }
 
@@ -1083,12 +1149,18 @@ body {
 .invites-error {
   text-align: center;
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   padding: 20px 0;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .invites-error {
-  color: var(--danger);
+  color: var(--text-secondary);
 }
 
 .invites-action {
@@ -1096,25 +1168,27 @@ body {
   align-items: center;
   justify-content: center;
   margin-top: 8px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
   border: 1px solid var(--color-divider);
-  background: var(--color-overlay);
-  color: var(--accent);
+  background: var(--bg-input);
+  color: var(--text-secondary);
   text-decoration: none;
   font-size: 10px;
 }
 
 .invites-action:hover {
-  background: var(--color-overlay-hover);
+  background: var(--btn-secondary-hover);
+  color: var(--accent);
 }
 
 .invites-summary {
   font-size: 10px;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
+  gap: 6px;
 }
 
 .invites-cards {
@@ -1279,10 +1353,24 @@ body {
 }
 
 @media (max-width: 420px) {
+  .invites-header {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "title"
+      "status"
+      "controls";
+  }
+
   .invites-summary {
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     align-items: flex-start;
+  }
+
+  .invites-controls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
   }
 
   .invites-cards {

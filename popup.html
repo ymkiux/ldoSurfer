@@ -150,24 +150,26 @@
     <div class="tab-panel" data-panel="invites" role="tabpanel">
       <div class="scroll-container">
         <div class="invites-header">
-          <div>
-            <div class="invites-title">邀请榜单</div>
-            <div class="invites-subtitle" id="invitesStatus">每 5 分钟自动刷新</div>
+          <div class="invites-title">邀请榜单</div>
+          <div class="invites-status" id="invitesStatus">每 5 分钟自动刷新</div>
+          <div class="invites-controls">
+            <select id="invitesSort" class="invites-select">
+              <option value="used">按已用</option>
+              <option value="rate">按使用率</option>
+              <option value="recent">按最近创建</option>
+            </select>
+            <label class="invites-filter">
+              <input type="checkbox" id="invitesFilterUsed">
+              <span>仅已用</span>
+            </label>
+            <button id="invitesRefresh" class="btn-text invites-refresh" style="font-size:10px;padding:2px 6px;">刷新</button>
           </div>
-          <button id="invitesRefresh" class="btn-text" style="font-size:10px;padding:2px 6px;">刷新</button>
         </div>
         <div class="invites-body" id="invitesBody">
           <div class="invites-loading">加载中...</div>
         </div>
       </div>
 
-      <!-- 底部栏(邀请页) -->
-      <div class="footer-bar">
-        <div style="display:flex;gap:12px;">
-          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
-          <a href="https://connect.linux.do/dash/invites" target="_blank" class="footer-link">邀请页</a>
-        </div>
-      </div>
     </div>
 
     <!-- 站名显示（主题按钮左侧） -->

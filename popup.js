@@ -722,13 +722,36 @@ function buildInviteLeaderboard(records) {
     map.set(key, existing);
   });
 
-  const list = Array.from(map.values());
-  list.sort((a, b) => {
-    if (b.totalUsed !== a.totalUsed) return b.totalUsed - a.totalUsed;
-    if (b.totalCapacity !== a.totalCapacity) return b.totalCapacity - a.totalCapacity;
-    return b.latestCreatedAtMs - a.latestCreatedAtMs;
+  return Array.from(map.values());
+}
+
+function getInviteRate(item) {
+  if (!item.totalCapacity) return 0;
+  return item.totalUsed / item.totalCapacity;
+}
+
+function sortInviteLeaderboard(list, sortKey) {
+  const sorted = [...list];
+  sorted.sort((a, b) => {
+    switch (sortKey) {
+      case 'rate': {
+        const rateDiff = getInviteRate(b) - getInviteRate(a);
+        if (rateDiff !== 0) return rateDiff;
+        if (b.totalUsed !== a.totalUsed) return b.totalUsed - a.totalUsed;
+        return b.latestCreatedAtMs - a.latestCreatedAtMs;
+      }
+      case 'recent': {
+        if (b.latestCreatedAtMs !== a.latestCreatedAtMs) return b.latestCreatedAtMs - a.latestCreatedAtMs;
+        return b.totalUsed - a.totalUsed;
+      }
+      case 'used':
+      default:
+        if (b.totalUsed !== a.totalUsed) return b.totalUsed - a.totalUsed;
+        if (b.totalCapacity !== a.totalCapacity) return b.totalCapacity - a.totalCapacity;
+        return b.latestCreatedAtMs - a.latestCreatedAtMs;
+    }
   });
-  return list;
+  return sorted;
 }
 
 class InvitesBoard {
@@ -736,9 +759,18 @@ class InvitesBoard {
     this.m_bodyEl = null;
     this.m_statusEl = null;
     this.m_refreshBtn = null;
+    this.m_sortEl = null;
+    this.m_filterEl = null;
     this.m_isActive = false;
     this.m_refreshTimer = null;
+    this.m_countdownTimer = null;
     this.m_lastFetchAt = 0;
+    this.m_lastRecords = [];
+    this.m_lastUpdatedAt = 0;
+    this.m_statusBaseText = '';
+    this.m_nextRefreshAt = 0;
+    this.m_sortKey = 'used';
+    this.m_filterUsed = false;
     this.m_refreshIntervalMs = 5 * 60 * 1000;
   }
 
@@ -746,8 +778,21 @@ class InvitesBoard {
     this.m_bodyEl = document.getElementById('invitesBody');
     this.m_statusEl = document.getElementById('invitesStatus');
     this.m_refreshBtn = document.getElementById('invitesRefresh');
-    if (!this.m_bodyEl || !this.m_statusEl || !this.m_refreshBtn) return;
+    this.m_sortEl = document.getElementById('invitesSort');
+    this.m_filterEl = document.getElementById('invitesFilterUsed');
+    if (!this.m_bodyEl || !this.m_statusEl || !this.m_refreshBtn || !this.m_sortEl || !this.m_filterEl) return;
+    this.m_statusBaseText = (this.m_statusEl.textContent || '').trim();
+    this.m_sortEl.value = this.m_sortKey;
+    this.m_filterEl.checked = this.m_filterUsed;
     this.m_refreshBtn.addEventListener('click', () => this.refresh(true));
+    this.m_sortEl.addEventListener('change', () => {
+      this.m_sortKey = this.m_sortEl.value;
+      this.renderFromCache();
+    });
+    this.m_filterEl.addEventListener('change', () => {
+      this.m_filterUsed = this.m_filterEl.checked;
+      this.renderFromCache();
+    });
   }
 
   setActive(active) {
@@ -762,14 +807,39 @@ class InvitesBoard {
   }
 
   startAutoRefresh() {
-    if (this.m_refreshTimer) return;
-    this.m_refreshTimer = setInterval(() => this.refresh(false), this.m_refreshIntervalMs);
+    if (!this.m_refreshTimer) {
+      this.m_refreshTimer = setInterval(() => this.refresh(false), this.m_refreshIntervalMs);
+    }
+    if (!this.m_countdownTimer) {
+      this.m_countdownTimer = setInterval(() => this.renderStatus(), 1000);
+    }
   }
 
   stopAutoRefresh() {
-    if (!this.m_refreshTimer) return;
-    clearInterval(this.m_refreshTimer);
-    this.m_refreshTimer = null;
+    if (this.m_refreshTimer) {
+      clearInterval(this.m_refreshTimer);
+      this.m_refreshTimer = null;
+    }
+    if (this.m_countdownTimer) {
+      clearInterval(this.m_countdownTimer);
+      this.m_countdownTimer = null;
+    }
+    this.m_nextRefreshAt = 0;
+    this.renderStatus();
+  }
+
+  prepareLeaderboard(records) {
+    let list = buildInviteLeaderboard(records);
+    if (this.m_filterUsed) {
+      list = list.filter(item => item.totalUsed > 0);
+    }
+    return sortInviteLeaderboard(list, this.m_sortKey);
+  }
+
+  renderFromCache() {
+    if (!this.m_lastRecords || this.m_lastRecords.length === 0) return;
+    const leaderboard = this.prepareLeaderboard(this.m_lastRecords);
+    this.renderTable(leaderboard, this.m_lastRecords.length, this.m_lastUpdatedAt || Date.now());
   }
 
   async refresh(force) {
@@ -777,16 +847,20 @@ class InvitesBoard {
     const now = Date.now();
     if (!force && now - this.m_lastFetchAt < 1000) return;
     this.m_lastFetchAt = now;
+    this.m_nextRefreshAt = now + this.m_refreshIntervalMs;
+    this.renderStatus();
     this.renderLoading();
     try {
       const html = await this.fetchInvitesHtml();
       const records = parseInvitesHtml(html);
+      this.m_lastRecords = records;
+      this.m_lastUpdatedAt = now;
       if (records.length === 0) {
         this.renderEmpty('未找到邀请记录，可能未登录或无权限');
-        this.updateStatus(`加载失败 ${this.formatTime(now)}`);
+      this.updateStatus('打开邀请页');
         return;
       }
-      const leaderboard = buildInviteLeaderboard(records);
+      const leaderboard = this.prepareLeaderboard(records);
       this.renderTable(leaderboard, records.length, now);
     } catch (error) {
       this.renderError(error);
@@ -814,7 +888,7 @@ class InvitesBoard {
     this.m_bodyEl.innerHTML = `
       <div class="invites-empty">
         <div>${message}</div>
-        <a class="invites-action" href="${INVITES_URL}" target="_blank">点击打开邀请页</a>
+        <a class="invites-action" href="${INVITES_URL}" target="_blank">打开邀请页</a>
       </div>
     `;
   }
@@ -824,17 +898,18 @@ class InvitesBoard {
     if (!this.m_bodyEl) return;
     this.m_bodyEl.innerHTML = `
       <div class="invites-error">
-        <div>加载失败</div>
-        <a class="invites-action" href="${INVITES_URL}" target="_blank">点击打开邀请页</a>
+        <a class="invites-action" href="${INVITES_URL}" target="_blank">打开邀请页</a>
       </div>
     `;
-    this.updateStatus('加载失败，点击打开邀请页');
+    this.updateStatus('打开邀请页');
   }
 
   renderTable(leaderboard, totalRecords, now) {
     if (!this.m_bodyEl) return;
     if (leaderboard.length === 0) {
-      this.renderEmpty('暂无榜单数据');
+      const message = this.m_filterUsed ? '筛选后无数据' : '暂无榜单数据';
+      this.renderEmpty(message);
+      this.updateStatus(`更新 ${this.formatTime(now)}`);
       return;
     }
     const rows = leaderboard.map((item, index) => {
@@ -912,12 +987,23 @@ class InvitesBoard {
         </tbody>
       </table>
     `;
-    this.updateStatus(`已更新 ${this.formatTime(now)} · ${leaderboard.length} 人`);
+    this.updateStatus(`更新 ${this.formatTime(now)}`);
   }
 
   updateStatus(text) {
+    this.m_statusBaseText = text;
+    this.renderStatus();
+  }
+
+  renderStatus() {
     if (!this.m_statusEl) return;
-    this.m_statusEl.textContent = text;
+    let text = this.m_statusBaseText || '';
+    if (this.m_isActive && this.m_nextRefreshAt) {
+      const countdown = this.formatCountdown(this.m_nextRefreshAt - Date.now());
+      const suffix = `下次 ${countdown}`;
+      text = text ? `${text} · ${suffix}` : suffix;
+    }
+    this.m_statusEl.textContent = text || '等待加载...';
   }
 
   formatTime(timestamp) {
@@ -925,6 +1011,18 @@ class InvitesBoard {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
+  }
+
+  formatCountdown(ms) {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const seconds = totalSeconds % 60;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const minutes = totalMinutes % 60;
+    const hours = Math.floor(totalMinutes / 60);
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   }
 }
 
