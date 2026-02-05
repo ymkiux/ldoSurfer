@@ -761,6 +761,10 @@ class InvitesBoard {
     this.m_refreshBtn = null;
     this.m_sortEl = null;
     this.m_filterEl = null;
+    this.m_scrollTimer = null;
+    this.m_isScrolling = false;
+    this.m_scrollHandler = null;
+    this.m_hasScrollListener = false;
     this.m_isActive = false;
     this.m_refreshTimer = null;
     this.m_countdownTimer = null;
@@ -793,17 +797,21 @@ class InvitesBoard {
       this.m_filterUsed = this.m_filterEl.checked;
       this.renderFromCache();
     });
+    this.m_scrollHandler = () => this.handleScroll();
   }
 
   setActive(active) {
     if (this.m_isActive === active) return;
     this.m_isActive = active;
     if (active) {
+      this.enableScrollTracking();
       this.refresh(true);
       this.startAutoRefresh();
       return;
     }
     this.stopAutoRefresh();
+    this.disableScrollTracking();
+    this.clearScrolling();
   }
 
   startAutoRefresh() {
@@ -826,6 +834,40 @@ class InvitesBoard {
     }
     this.m_nextRefreshAt = 0;
     this.renderStatus();
+  }
+
+  handleScroll() {
+    if (!this.m_isActive) return;
+    if (!this.m_isScrolling) {
+      this.m_isScrolling = true;
+      document.body.classList.add('invites-scrolling');
+    }
+    if (this.m_scrollTimer) {
+      clearTimeout(this.m_scrollTimer);
+    }
+    this.m_scrollTimer = setTimeout(() => this.clearScrolling(), 180);
+  }
+
+  clearScrolling() {
+    if (this.m_scrollTimer) {
+      clearTimeout(this.m_scrollTimer);
+      this.m_scrollTimer = null;
+    }
+    if (!this.m_isScrolling) return;
+    this.m_isScrolling = false;
+    document.body.classList.remove('invites-scrolling');
+  }
+
+  enableScrollTracking() {
+    if (this.m_hasScrollListener || !this.m_scrollHandler) return;
+    document.addEventListener('scroll', this.m_scrollHandler, true);
+    this.m_hasScrollListener = true;
+  }
+
+  disableScrollTracking() {
+    if (!this.m_hasScrollListener || !this.m_scrollHandler) return;
+    document.removeEventListener('scroll', this.m_scrollHandler, true);
+    this.m_hasScrollListener = false;
   }
 
   prepareLeaderboard(records) {

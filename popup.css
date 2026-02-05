@@ -283,6 +283,7 @@ body {
   text-overflow: ellipsis;
   cursor: default;
   pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .theme-switcher {
@@ -294,6 +295,7 @@ body {
   border: none;
   box-shadow: none;
   z-index: 10;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .guide-switcher {
@@ -305,6 +307,15 @@ body {
   border: none;
   box-shadow: none;
   z-index: 10;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+body.invites-scrolling .site-name,
+body.invites-scrolling .theme-switcher,
+body.invites-scrolling .guide-switcher {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
 }
 
 .theme-meta {
@@ -1057,7 +1068,7 @@ body {
     "title controls"
     "status controls";
   gap: 6px 10px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   padding: 10px 12px;
   background: var(--bg-card);
   border-radius: var(--radius-m);
@@ -1185,7 +1196,7 @@ body {
 .invites-summary {
   font-size: 10px;
   color: var(--text-tertiary);
-  margin-bottom: 8px;
+  margin-bottom: 0;
   display: flex;
   justify-content: space-between;
   gap: 6px;
