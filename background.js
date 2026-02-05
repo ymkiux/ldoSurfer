@@ -3,6 +3,7 @@ const DEFAULT_DAILY_AUTO = {
   enabled: true,
   target: 50,
   time: '09:00',
+  endTime: '19:00',
   date: '',
   count: 0,
   running: false
@@ -18,14 +19,30 @@ function getTodayString() {
 }
 
 function parseDailyTime(time) {
-  if (!time || typeof time !== 'string') return { hour: 9, minute: 0 };
+  if (!time || typeof time !== 'string') return { hour: 9, minute: 0, valid: false };
   const parts = time.split(':');
-  if (parts.length !== 2) return { hour: 9, minute: 0 };
+  if (parts.length !== 2) return { hour: 9, minute: 0, valid: false };
   const hour = Number(parts[0]);
   const minute = Number(parts[1]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return { hour: 9, minute: 0 };
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return { hour: 9, minute: 0 };
-  return { hour, minute };
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return { hour: 9, minute: 0, valid: false };
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return { hour: 9, minute: 0, valid: false };
+  return { hour, minute, valid: true };
+}
+
+function formatDailyTime(hour, minute) {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function normalizeDailyTime(time) {
+  const parsed = parseDailyTime(time);
+  return formatDailyTime(parsed.hour, parsed.minute);
+}
+
+function defaultDailyEndTime(startTime) {
+  const parsed = parseDailyTime(startTime);
+  const totalMinutes = parsed.hour * 60 + parsed.minute + 600;
+  const normalizedMinutes = totalMinutes % (24 * 60);
+  return formatDailyTime(Math.floor(normalizedMinutes / 60), normalizedMinutes % 60);
 }
 
 function getNextRunTime(time) {
@@ -42,6 +59,8 @@ function getNextRunTime(time) {
 function normalizeDailyAuto(raw) {
   const today = getTodayString();
   const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
+  config.time = normalizeDailyTime(config.time);
+  config.endTime = defaultDailyEndTime(config.time);
   if (config.date !== today) {
     config.date = today;
     config.count = 0;

@@ -10,6 +10,7 @@ const DEFAULT_DAILY_AUTO = {
   enabled: true,
   target: 50,
   time: '09:00',
+  endTime: '19:00',
   date: '',
   count: 0,
   running: false
@@ -192,6 +193,9 @@ class PopupController {
     this.logs = [];
     this.dailyAutoToggleEl = null;
     this.dailyAutoTimeEl = null;
+    this.guidePanelEl = null;
+    this.guideOpenEl = null;
+    this.guideCloseEl = null;
     this.config = {
       minScrollDelay: 800,
       maxScrollDelay: 3000,
@@ -210,6 +214,7 @@ class PopupController {
   init() {
     this.themeManager.init();
     this.siteManager.init();
+    this.initGuidePanel();
     this.bindEvents();
     this.initDailyAutoToggle();
     this.loadSettings();
@@ -319,14 +324,44 @@ class PopupController {
   }
 
   async stop() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    this.sendMessageWithRetry(tab.id, { action: 'stop' }, (response) => {
-      if (response?.success) {
-        this.isRunning = false;
-        this.updateStatus();
-        this.log('已停止浏览', 'warning');
+    const tabs = await chrome.tabs.query({
+      url: ['https://linux.do/*', 'https://idcflare.com/*']
+    });
+    if (!tabs.length) {
+      this.isRunning = false;
+      this.updateStatus();
+      this.log('没有可停止的浏览任务', 'warning');
+      return;
+    }
+    tabs.forEach((tab) => {
+      if (!tab?.id) return;
+      this.sendMessageWithRetry(tab.id, { action: 'stop' });
+    });
+    this.isRunning = false;
+    this.updateStatus();
+    this.log('已发送停止指令', 'warning');
+  }
+
+  initGuidePanel() {
+    this.guidePanelEl = document.getElementById('guidePanel');
+    this.guideOpenEl = document.getElementById('openGuidePanel');
+    this.guideCloseEl = document.getElementById('closeGuidePanel');
+    if (!this.guidePanelEl || !this.guideOpenEl || !this.guideCloseEl) return;
+    this.guideOpenEl.addEventListener('click', () => this.openGuidePanel());
+    this.guideCloseEl.addEventListener('click', () => this.closeGuidePanel());
+    this.guidePanelEl.addEventListener('click', (event) => {
+      if (event.target.classList.contains('theme-modal__backdrop')) {
+        this.closeGuidePanel();
       }
     });
+  }
+
+  openGuidePanel() {
+    this.guidePanelEl?.removeAttribute('hidden');
+  }
+
+  closeGuidePanel() {
+    this.guidePanelEl?.setAttribute('hidden', '');
   }
 
   async resetAndStart() {
@@ -515,22 +550,46 @@ class PopupController {
     chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       this.dailyAutoToggleEl.checked = config.enabled !== false;
-      this.dailyAutoTimeEl.value = this.normalizeDailyTime(config.time);
-      if (!result[DAILY_AUTO_KEY]) {
+      config.time = this.normalizeDailyTime(config.time);
+      config.endTime = this.defaultDailyEndTime(config.time);
+      this.dailyAutoTimeEl.value = config.time;
+      const stored = result[DAILY_AUTO_KEY];
+      const shouldSave =
+        !stored ||
+        stored.time !== config.time ||
+        stored.endTime !== config.endTime ||
+        stored.enabled !== config.enabled;
+      if (shouldSave) {
         chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
       }
     });
   }
 
-  normalizeDailyTime(time) {
-    if (!time || typeof time !== 'string') return '09:00';
+  parseDailyTime(time) {
+    if (!time || typeof time !== 'string') return { hour: 9, minute: 0, valid: false };
     const parts = time.split(':');
-    if (parts.length !== 2) return '09:00';
+    if (parts.length !== 2) return { hour: 9, minute: 0, valid: false };
     const hour = Number(parts[0]);
     const minute = Number(parts[1]);
-    if (!Number.isInteger(hour) || !Number.isInteger(minute)) return '09:00';
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return '09:00';
+    if (!Number.isInteger(hour) || !Number.isInteger(minute)) return { hour: 9, minute: 0, valid: false };
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return { hour: 9, minute: 0, valid: false };
+    return { hour, minute, valid: true };
+  }
+
+  formatDailyTime(hour, minute) {
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  normalizeDailyTime(time) {
+    const parsed = this.parseDailyTime(time);
+    return this.formatDailyTime(parsed.hour, parsed.minute);
+  }
+
+  defaultDailyEndTime(startTime) {
+    const parsed = this.parseDailyTime(startTime);
+    const totalMinutes = parsed.hour * 60 + parsed.minute + 600;
+    const normalizedMinutes = totalMinutes % (24 * 60);
+    return this.formatDailyTime(Math.floor(normalizedMinutes / 60), normalizedMinutes % 60);
   }
 
   saveDailyAutoTime(time) {
@@ -538,6 +597,7 @@ class PopupController {
     chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.time = normalized;
+      config.endTime = this.defaultDailyEndTime(normalized);
       chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
     });
   }
@@ -547,6 +607,7 @@ class PopupController {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.enabled = enabled;
       config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
+      config.endTime = this.defaultDailyEndTime(config.time);
       if (!enabled) {
         config.running = false;
       }

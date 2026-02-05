@@ -7,6 +7,7 @@ const DEFAULT_DAILY_AUTO = {
   enabled: true,
   target: 50,
   time: '09:00',
+  endTime: '19:00',
   date: '',
   count: 0,
   running: false
@@ -82,10 +83,70 @@ class HumanBrowser {
     return `${year}-${month}-${day}`;
   }
 
+  parseDateString(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return null;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    const day = Number(parts[2]);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return new Date(year, month - 1, day, 0, 0, 0, 0);
+  }
+
+  parseDailyTime(time) {
+    if (!time || typeof time !== 'string') return { hour: 9, minute: 0, valid: false };
+    const parts = time.split(':');
+    if (parts.length !== 2) return { hour: 9, minute: 0, valid: false };
+    const hour = Number(parts[0]);
+    const minute = Number(parts[1]);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute)) return { hour: 9, minute: 0, valid: false };
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return { hour: 9, minute: 0, valid: false };
+    return { hour, minute, valid: true };
+  }
+
+  formatDailyTime(hour, minute) {
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  normalizeDailyTime(time) {
+    const parsed = this.parseDailyTime(time);
+    return this.formatDailyTime(parsed.hour, parsed.minute);
+  }
+
+  defaultDailyEndTime(startTime) {
+    const parsed = this.parseDailyTime(startTime);
+    const totalMinutes = parsed.hour * 60 + parsed.minute + 600;
+    const normalizedMinutes = totalMinutes % (24 * 60);
+    return this.formatDailyTime(Math.floor(normalizedMinutes / 60), normalizedMinutes % 60);
+  }
+
+  getDailyAutoWindow(dateStr, startTime, endTime) {
+    const baseDate =
+      this.parseDateString(dateStr) || this.parseDateString(this.getTodayString()) || new Date();
+    const startParts = this.parseDailyTime(startTime);
+    const endParts = this.parseDailyTime(endTime);
+    const startDate = new Date(baseDate);
+    startDate.setHours(startParts.hour, startParts.minute, 0, 0);
+    const endDate = new Date(baseDate);
+    endDate.setHours(endParts.hour, endParts.minute, 0, 0);
+    if (endDate <= startDate) {
+      endDate.setDate(endDate.getDate() + 1);
+    }
+    return { startMs: startDate.getTime(), endMs: endDate.getTime() };
+  }
+
   normalizeDailyAuto(raw) {
     const today = this.getTodayString();
     const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
-    if (config.date !== today) {
+    config.time = this.normalizeDailyTime(config.time);
+    config.endTime = this.defaultDailyEndTime(config.time);
+    const normalizedDate = this.parseDateString(config.date) ? config.date : today;
+    config.date = normalizedDate;
+    const window = this.getDailyAutoWindow(config.date, config.time, config.endTime);
+    const now = Date.now();
+    if (config.date !== today && (!config.running || now >= window.endMs)) {
       config.date = today;
       config.count = 0;
       config.running = false;
@@ -101,7 +162,13 @@ class HumanBrowser {
       chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
         const stored = result[DAILY_AUTO_KEY];
         const normalized = this.normalizeDailyAuto(stored);
-        if (!stored) {
+        const shouldSave =
+          !stored ||
+          stored.time !== normalized.time ||
+          stored.endTime !== normalized.endTime ||
+          stored.date !== normalized.date ||
+          stored.enabled !== normalized.enabled;
+        if (shouldSave) {
           chrome.storage.local.set({ [DAILY_AUTO_KEY]: normalized }, () => resolve(normalized));
           return;
         }
@@ -126,24 +193,48 @@ class HumanBrowser {
 
   async updateDailyAutoProgress(isNewPost) {
     if (!this.isDailyAutoRunning()) return false;
+    if (await this.checkDailyAutoDeadline()) return true;
     if (isNewPost) {
       this.dailyAuto.count += 1;
-    }
-    await this.saveDailyAuto(this.dailyAuto);
-    if (this.dailyAuto.count >= this.dailyAuto.target) {
-      await this.finishDailyAuto();
-      return true;
+      await this.saveDailyAuto(this.dailyAuto);
     }
     return false;
   }
 
-  async finishDailyAuto() {
+  async finishDailyAuto(reason = '每日任务完成，已停止') {
     this.dailyAuto.running = false;
     await this.saveDailyAuto(this.dailyAuto);
     this.state.isRunning = false;
+    this.stopRunTimer();
     await this.saveState(this.state);
-    this.sendMessage({ type: 'log', message: '每日任务完成，已停止' });
+    this.sendMessage({ type: 'log', message: reason });
     this.sendMessage({ type: 'stopped' });
+  }
+
+  async checkDailyAutoDeadline() {
+    if (!this.isDailyAutoRunning()) return false;
+    this.dailyAuto.endTime = this.defaultDailyEndTime(this.dailyAuto.time);
+    const window = this.getDailyAutoWindow(
+      this.dailyAuto.date || this.getTodayString(),
+      this.dailyAuto.time,
+      this.dailyAuto.endTime
+    );
+    if (Date.now() < window.endMs) return false;
+    await this.finishDailyAuto('已到每日结束时间，已停止');
+    return true;
+  }
+
+  startRunTimer() {
+    if (!this.state.lastStartTime) {
+      this.state.lastStartTime = Date.now();
+    }
+  }
+
+  stopRunTimer() {
+    if (this.state.lastStartTime) {
+      this.state.accumulatedTime += Date.now() - this.state.lastStartTime;
+      this.state.lastStartTime = null;
+    }
   }
 
   // 清除状态
@@ -161,6 +252,11 @@ class HumanBrowser {
     this.state = state;
     this.config = state.config || this.config;
     this.dailyAuto = await this.loadDailyAuto();
+    if (this.state.isRunning && !this.state.lastStartTime) {
+      this.state.lastStartTime = Date.now();
+      await this.saveState(this.state);
+    }
+    await this.checkDailyAutoDeadline();
 
     console.log('[Linux DO Auto] 状态加载完成', {
       isRunning: state.isRunning,
@@ -169,7 +265,7 @@ class HumanBrowser {
     });
 
     // 如果正在运行，根据当前页面类型继续执行
-    if (state.isRunning) {
+    if (this.state.isRunning) {
       console.log('[Linux DO Auto] 检测到正在运行，继续执行');
 
       if (this.isPostPage()) {
@@ -339,6 +435,7 @@ class HumanBrowser {
     let sameLocationCount = 0; // 检测是否卡在同一位置
 
     while (noNewCommentsCount < maxNoNewComments) {
+      if (await this.checkDailyAutoDeadline()) return;
       // 检查是否已停止或切换到快速模式
       if (!this.state.isRunning || this.isQuickModeEnabled()) {
         if (this.isQuickModeEnabled()) {
@@ -397,6 +494,7 @@ class HumanBrowser {
         this.sendMessage({ type: 'log', message: `从第 ${startIndex + 1} 条评论开始浏览` });
 
         for (let i = startIndex; i < comments.length; i++) {
+          if (await this.checkDailyAutoDeadline()) return;
           // 每次循环都检查状态和配置
           if (!this.state.isRunning || this.isQuickModeEnabled()) {
             if (this.isQuickModeEnabled()) {
@@ -538,6 +636,7 @@ class HumanBrowser {
     const postUrl = window.location.pathname;
 
     this.sendMessage({ type: 'log', message: `正在浏览帖子: ${postUrl}` });
+    if (await this.checkDailyAutoDeadline()) return;
 
     // 检查是否已浏览
     if (this.state.browsedPosts.includes(postUrl)) {
@@ -609,6 +708,8 @@ class HumanBrowser {
       return;
     }
 
+    if (await this.checkDailyAutoDeadline()) return;
+
     // 更新统计
     this.sendMessage({
       type: 'stats',
@@ -651,10 +752,7 @@ class HumanBrowser {
       return;
     }
 
-    if (this.isDailyAutoRunning() && this.dailyAuto.count >= this.dailyAuto.target) {
-      await this.finishDailyAuto();
-      return;
-    }
+    if (await this.checkDailyAutoDeadline()) return;
 
     const posts = this.getPostLinks();
     this.sendMessage({ type: 'log', message: `找到 ${posts.length} 个帖子` });
@@ -671,6 +769,7 @@ class HumanBrowser {
           this.sendMessage({ type: 'log', message: '已停止，不刷新' });
           return;
         }
+        if (await this.checkDailyAutoDeadline()) return;
         await this.sleep(1000);
       }
 
@@ -727,15 +826,18 @@ class HumanBrowser {
     const today = this.getTodayString();
     this.dailyAuto.date = date || today;
     this.dailyAuto.count = 0;
-    this.dailyAuto.target = target || this.dailyAuto.target || DEFAULT_DAILY_AUTO.target;
+    this.dailyAuto.time = this.normalizeDailyTime(this.dailyAuto.time);
+    this.dailyAuto.endTime = this.defaultDailyEndTime(this.dailyAuto.time);
     this.dailyAuto.running = true;
     await this.saveDailyAuto(this.dailyAuto);
+    if (await this.checkDailyAutoDeadline()) return;
     await this.start();
   }
   async start() {
     console.log('[Linux DO Auto] 开始浏览，保留历史记录');
 
     this.state.isRunning = true;
+    this.startRunTimer();
 
     // 只有第一次运行或重置后才设置开始时间
     if (!this.state.stats.startTime) {
@@ -765,7 +867,7 @@ class HumanBrowser {
     this.state.stats.errors = 0;
     // 重置累积运行时间
     this.state.accumulatedTime = 0;
-    this.state.lastStartTime = null;
+    this.state.lastStartTime = Date.now();
 
     await this.saveState(this.state);
 
@@ -784,6 +886,7 @@ class HumanBrowser {
     console.log('[Linux DO Auto] 停止浏览');
 
     this.state.isRunning = false;
+    this.stopRunTimer();
     await this.saveState(this.state);
     if (this.isDailyAutoRunning()) {
       this.dailyAuto.running = false;

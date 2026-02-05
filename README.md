@@ -90,12 +90,14 @@ Location: **Advanced Browse Settings**
 
 1. Open the extension popup and expand **Advanced Browse Settings**
 2. Enable **Daily Auto Browse**
-3. Set the daily time (HH:MM)
-4. At the scheduled time, the extension opens `/latest` and starts browsing automatically
+3. Set the daily start time (HH:MM)
+4. Daily end time is fixed to start time + 10 hours
+5. At the scheduled time, the extension opens `/latest` and starts browsing automatically
 
 **Notes**
 - The toggle must be enabled; disabling it cancels the schedule
 - You must be on linux.do or idcflare.com for actions to work
+- Terminology: "Post" in the extension corresponds to a forum "Topic" (article); "Comment" in the extension corresponds to a forum "Post"
 
 ### Notes
 

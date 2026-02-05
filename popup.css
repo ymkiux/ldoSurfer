@@ -267,7 +267,7 @@ body {
 /* ---------------- 组件：主题切换 ---------------- */
 .site-name {
   position: fixed;
-  right: 52px;
+  right: 92px;
   bottom: 12px;
   font-size: 11px;
   font-weight: 700;
@@ -288,6 +288,17 @@ body {
 .theme-switcher {
   position: fixed;
   right: 12px;
+  bottom: 12px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  z-index: 10;
+}
+
+.guide-switcher {
+  position: fixed;
+  right: 52px;
   bottom: 12px;
   padding: 0;
   background: transparent;
@@ -408,6 +419,28 @@ body {
 .theme-modal__close:hover {
   background: var(--bg-input-active);
   color: var(--text-primary);
+}
+
+.guide-content {
+  padding-top: 4px;
+}
+
+.guide-list {
+  padding-left: 18px;
+  display: grid;
+  gap: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.guide-list li {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-divider);
+}
+
+.guide-list li:last-child {
+  border-bottom: none;
 }
 
 .theme-section {
