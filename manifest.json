@@ -11,7 +11,8 @@
   ],
   "host_permissions": [
     "https://linux.do/*",
-    "https://idcflare.com/*"
+    "https://idcflare.com/*",
+    "https://connect.linux.do/*"
   ],
   "action": {
     "default_popup": "popup.html",

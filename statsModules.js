@@ -415,13 +415,17 @@ class StatsTab {
     tabPanels.forEach(panel => {
       if (panel.dataset.panel === tabName) {
         panel.classList.add('active');
-        if (tabName === 'stats') {
-          this._renderStats();
-        }
       } else {
         panel.classList.remove('active');
       }
     });
+
+    if (tabName === 'stats') {
+      this._renderStats();
+    }
+    if (window.g_invitesBoard && typeof window.g_invitesBoard.setActive === 'function') {
+      window.g_invitesBoard.setActive(tabName === 'invites');
+    }
   }
 
   async _renderStats() {

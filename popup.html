@@ -12,6 +12,7 @@
     <div class="tab-nav" role="tablist">
       <button class="tab-button active" data-tab="control" role="tab" aria-selected="true">控制中心</button>
       <button class="tab-button" data-tab="stats" role="tab" aria-selected="false">数据统计</button>
+      <button class="tab-button" data-tab="invites" role="tab" aria-selected="false">邀请榜单</button>
     </div>
 
     <!-- 控制面板 -->
@@ -141,6 +142,30 @@
         <div style="display:flex;gap:12px;">
           <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
           <a href="#" id="openLatestStats" class="footer-link">最新</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 邀请榜单面板 -->
+    <div class="tab-panel" data-panel="invites" role="tabpanel">
+      <div class="scroll-container">
+        <div class="invites-header">
+          <div>
+            <div class="invites-title">邀请榜单</div>
+            <div class="invites-subtitle" id="invitesStatus">每 5 分钟自动刷新</div>
+          </div>
+          <button id="invitesRefresh" class="btn-text" style="font-size:10px;padding:2px 6px;">刷新</button>
+        </div>
+        <div class="invites-body" id="invitesBody">
+          <div class="invites-loading">加载中...</div>
+        </div>
+      </div>
+
+      <!-- 底部栏(邀请页) -->
+      <div class="footer-bar">
+        <div style="display:flex;gap:12px;">
+          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
+          <a href="https://connect.linux.do/dash/invites" target="_blank" class="footer-link">邀请页</a>
         </div>
       </div>
     </div>

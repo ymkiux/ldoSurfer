@@ -646,7 +646,292 @@ class PopupController {
   }
 }
 
+const INVITES_URL = 'https://connect.linux.do/dash/invites';
+
+function parseInviteTime(text) {
+  const match = text.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return 0;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] || 0);
+  return new Date(year, month - 1, day, hour, minute, second).getTime();
+}
+
+function parseInviteUsage(text) {
+  const numbers = text.match(/\d+/g) || [];
+  return {
+    used: Number(numbers[0] || 0),
+    capacity: Number(numbers[1] || 0)
+  };
+}
+
+function parseInvitesHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const rows = Array.from(doc.querySelectorAll('table tbody tr'));
+  const records = [];
+  rows.forEach((row) => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 4) return;
+    const userLink = cells[0].querySelector('a');
+    const userName = (userLink?.textContent || cells[0].textContent || '').trim();
+    const userUrl = userLink?.getAttribute('href') || '';
+    const createdAt = (cells[1].textContent || '').trim();
+    const expiresAt = (cells[2].textContent || '').trim();
+    const usageText = (cells[3].textContent || '').replace(/\s+/g, ' ').trim();
+    const usage = parseInviteUsage(usageText);
+    if (!userName) return;
+    records.push({
+      userName,
+      userUrl,
+      createdAt,
+      expiresAt,
+      used: usage.used,
+      capacity: usage.capacity
+    });
+  });
+  return records;
+}
+
+function buildInviteLeaderboard(records) {
+  const map = new Map();
+  records.forEach((record) => {
+    const key = record.userName;
+    const existing = map.get(key) || {
+      userName: record.userName,
+      userUrl: record.userUrl,
+      totalUsed: 0,
+      totalCapacity: 0,
+      invites: 0,
+      latestCreatedAt: record.createdAt,
+      latestCreatedAtMs: 0
+    };
+    existing.totalUsed += record.used;
+    existing.totalCapacity += record.capacity;
+    existing.invites += 1;
+    const createdAtMs = parseInviteTime(record.createdAt);
+    if (createdAtMs >= existing.latestCreatedAtMs) {
+      existing.latestCreatedAtMs = createdAtMs;
+      existing.latestCreatedAt = record.createdAt;
+    }
+    if (!existing.userUrl && record.userUrl) {
+      existing.userUrl = record.userUrl;
+    }
+    map.set(key, existing);
+  });
+
+  const list = Array.from(map.values());
+  list.sort((a, b) => {
+    if (b.totalUsed !== a.totalUsed) return b.totalUsed - a.totalUsed;
+    if (b.totalCapacity !== a.totalCapacity) return b.totalCapacity - a.totalCapacity;
+    return b.latestCreatedAtMs - a.latestCreatedAtMs;
+  });
+  return list;
+}
+
+class InvitesBoard {
+  constructor() {
+    this.m_bodyEl = null;
+    this.m_statusEl = null;
+    this.m_refreshBtn = null;
+    this.m_isActive = false;
+    this.m_refreshTimer = null;
+    this.m_lastFetchAt = 0;
+    this.m_refreshIntervalMs = 5 * 60 * 1000;
+  }
+
+  init() {
+    this.m_bodyEl = document.getElementById('invitesBody');
+    this.m_statusEl = document.getElementById('invitesStatus');
+    this.m_refreshBtn = document.getElementById('invitesRefresh');
+    if (!this.m_bodyEl || !this.m_statusEl || !this.m_refreshBtn) return;
+    this.m_refreshBtn.addEventListener('click', () => this.refresh(true));
+  }
+
+  setActive(active) {
+    if (this.m_isActive === active) return;
+    this.m_isActive = active;
+    if (active) {
+      this.refresh(true);
+      this.startAutoRefresh();
+      return;
+    }
+    this.stopAutoRefresh();
+  }
+
+  startAutoRefresh() {
+    if (this.m_refreshTimer) return;
+    this.m_refreshTimer = setInterval(() => this.refresh(false), this.m_refreshIntervalMs);
+  }
+
+  stopAutoRefresh() {
+    if (!this.m_refreshTimer) return;
+    clearInterval(this.m_refreshTimer);
+    this.m_refreshTimer = null;
+  }
+
+  async refresh(force) {
+    if (!this.m_isActive) return;
+    const now = Date.now();
+    if (!force && now - this.m_lastFetchAt < 1000) return;
+    this.m_lastFetchAt = now;
+    this.renderLoading();
+    try {
+      const html = await this.fetchInvitesHtml();
+      const records = parseInvitesHtml(html);
+      if (records.length === 0) {
+        this.renderEmpty('未找到邀请记录，可能未登录或无权限');
+        this.updateStatus(`加载失败 ${this.formatTime(now)}`);
+        return;
+      }
+      const leaderboard = buildInviteLeaderboard(records);
+      this.renderTable(leaderboard, records.length, now);
+    } catch (error) {
+      this.renderError(error);
+    }
+  }
+
+  async fetchInvitesHtml() {
+    const response = await fetch(INVITES_URL, {
+      credentials: 'include',
+      cache: 'no-store'
+    });
+    if (!response.ok) {
+      throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+    }
+    return response.text();
+  }
+
+  renderLoading() {
+    if (!this.m_bodyEl) return;
+    this.m_bodyEl.innerHTML = '<div class="invites-loading">加载中...</div>';
+  }
+
+  renderEmpty(message) {
+    if (!this.m_bodyEl) return;
+    this.m_bodyEl.innerHTML = `
+      <div class="invites-empty">
+        <div>${message}</div>
+        <a class="invites-action" href="${INVITES_URL}" target="_blank">点击打开邀请页</a>
+      </div>
+    `;
+  }
+
+  renderError(error) {
+    console.error('[Invites] 加载失败', error);
+    if (!this.m_bodyEl) return;
+    this.m_bodyEl.innerHTML = `
+      <div class="invites-error">
+        <div>加载失败</div>
+        <a class="invites-action" href="${INVITES_URL}" target="_blank">点击打开邀请页</a>
+      </div>
+    `;
+    this.updateStatus('加载失败，点击打开邀请页');
+  }
+
+  renderTable(leaderboard, totalRecords, now) {
+    if (!this.m_bodyEl) return;
+    if (leaderboard.length === 0) {
+      this.renderEmpty('暂无榜单数据');
+      return;
+    }
+    const rows = leaderboard.map((item, index) => {
+      const rate = item.totalCapacity > 0 ? Math.round((item.totalUsed / item.totalCapacity) * 100) : 0;
+      const rateClass = rate >= 100 ? 'invites-rate--high' : rate >= 50 ? 'invites-rate--mid' : 'invites-rate--low';
+      const rateLevel = rate >= 100 ? 'high' : rate >= 50 ? 'mid' : 'low';
+      const rateWidth = Math.min(rate, 100);
+      const userCell = item.userUrl
+        ? `<a href="${item.userUrl}" target="_blank">${item.userName}</a>`
+        : item.userName;
+      return `
+        <tr>
+          <td class="invites-rank" data-label="#">${index + 1}</td>
+          <td class="invites-user" data-label="用户">${userCell}</td>
+          <td data-label="已用/容量"><span class="invites-used">${item.totalUsed}</span><span class="invites-capacity"> / ${item.totalCapacity}</span></td>
+          <td class="${rateClass}" data-label="使用率">${rate}%</td>
+          <td data-label="邀请数">${item.invites}</td>
+          <td data-label="最近创建">${item.latestCreatedAt || '-'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const cards = leaderboard.map((item, index) => {
+      const rate = item.totalCapacity > 0 ? Math.round((item.totalUsed / item.totalCapacity) * 100) : 0;
+      const rateClass = rate >= 100 ? 'invites-rate--high' : rate >= 50 ? 'invites-rate--mid' : 'invites-rate--low';
+      const rateLevel = rate >= 100 ? 'high' : rate >= 50 ? 'mid' : 'low';
+      const rateWidth = Math.min(rate, 100);
+      const userCell = item.userUrl
+        ? `<a href="${item.userUrl}" target="_blank">${item.userName}</a>`
+        : item.userName;
+      return `
+        <div class="invite-card">
+          <div class="invite-card__header">
+            <span class="invite-rank">#${index + 1}</span>
+            <span class="invite-user">${userCell}</span>
+            <span class="invite-rate ${rateClass}">${rate}%</span>
+          </div>
+          <div class="invite-card__bar">
+            <div class="invite-bar">
+              <span class="invite-bar__fill invite-bar__fill--${rateLevel}" style="width:${rateWidth}%"></span>
+            </div>
+            <div class="invite-bar__text">
+              <span class="invites-used">${item.totalUsed}</span><span class="invites-capacity"> / ${item.totalCapacity}</span>
+            </div>
+          </div>
+          <div class="invite-card__meta">
+            <span>邀请数 ${item.invites}</span>
+            <span>最近创建 ${item.latestCreatedAt || '-'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.m_bodyEl.innerHTML = `
+      <div class="invites-summary">
+        <span>记录 ${totalRecords} · 用户 ${leaderboard.length}</span>
+        <span>更新于 ${this.formatTime(now)}</span>
+      </div>
+      <div class="invites-cards">
+        ${cards}
+      </div>
+      <table class="invites-table">
+        <thead>
+          <tr>
+            <th class="invites-rank">#</th>
+            <th>用户</th>
+            <th>已用 / 容量</th>
+            <th>使用率</th>
+            <th>邀请数</th>
+            <th>最近创建</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    `;
+    this.updateStatus(`已更新 ${this.formatTime(now)} · ${leaderboard.length} 人`);
+  }
+
+  updateStatus(text) {
+    if (!this.m_statusEl) return;
+    this.m_statusEl.textContent = text;
+  }
+
+  formatTime(timestamp) {
+    const date = new Date(timestamp);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+}
+
 const controller = new PopupController();
+const g_invitesBoard = new InvitesBoard();
+g_invitesBoard.init();
+window.g_invitesBoard = g_invitesBoard;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.source === 'content') {

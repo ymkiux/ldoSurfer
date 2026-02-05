@@ -1048,3 +1048,253 @@ body {
   cursor: default;
   user-select: none;
 }
+
+/* ---------------- 邀请榜单 ---------------- */
+.invites-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.invites-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.invites-subtitle {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.invites-body {
+  background: var(--bg-card);
+  border-radius: var(--radius-m);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--input-border);
+  overflow-x: auto;
+}
+
+.invites-loading,
+.invites-empty,
+.invites-error {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding: 20px 0;
+}
+
+.invites-error {
+  color: var(--danger);
+}
+
+.invites-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-overlay);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 10px;
+}
+
+.invites-action:hover {
+  background: var(--color-overlay-hover);
+}
+
+.invites-summary {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.invites-cards {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.invite-card {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-m);
+  padding: 10px;
+  background: var(--bg-input);
+  box-shadow: var(--shadow-inner);
+}
+
+.invite-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.invite-rank {
+  font-weight: 700;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.invite-user {
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-user a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.invite-user a:hover {
+  color: var(--accent);
+}
+
+.invite-rate {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.invite-card__bar {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.invite-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-divider);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.invite-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.invite-bar__fill--mid {
+  background: #f59e0b;
+}
+
+.invite-bar__fill--high {
+  background: var(--danger);
+}
+
+.invite-bar__text {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.invite-card__meta {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.invites-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.invites-table td {
+  white-space: nowrap;
+}
+
+.invites-table td.invites-user {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invites-table th,
+.invites-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--color-divider);
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.invites-table th {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.invites-rank {
+  width: 20px;
+  text-align: right;
+  color: var(--text-tertiary);
+}
+
+.invites-user a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.invites-user a:hover {
+  color: var(--accent);
+}
+
+.invites-used {
+  font-weight: 600;
+  color: var(--success);
+}
+
+.invites-capacity {
+  color: var(--text-tertiary);
+}
+
+.invites-rate--low {
+  color: var(--text-tertiary);
+}
+
+.invites-rate--mid {
+  color: #f59e0b;
+}
+
+.invites-rate--high {
+  color: var(--danger);
+}
+
+@media (max-width: 420px) {
+  .invites-summary {
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+  }
+
+  .invites-cards {
+    display: flex;
+  }
+
+  .invites-table {
+    display: none;
+  }
+
+  .invite-card__meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
