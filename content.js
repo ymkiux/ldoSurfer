@@ -13,19 +13,8 @@ const DEFAULT_DAILY_AUTO = {
   running: false
 };
 
-// 加载统计记录模块（异步加载，避免阻塞）
-let StatsRecorder = null;
-(async () => {
-  try {
-    const moduleUrl = chrome.runtime.getURL('statsRecorderModule.js');
-    // 使用动态 import 加载模块
-    const module = await import(moduleUrl);
-    StatsRecorder = module.StatsRecorder;
-    console.log('[Stats] 统计模块加载成功');
-  } catch (e) {
-    console.warn('[Stats] 统计模块加载失败:', e);
-  }
-})();
+const statsRecorder = typeof StatsRecorder === 'undefined' ? null : StatsRecorder;
+
 
 class HumanBrowser {
   constructor() {
@@ -723,10 +712,10 @@ class HumanBrowser {
     await this.saveState(this.state);
 
     // 记录到统计数据（新增）
-    if (StatsRecorder && isNewPost) {
+    if (statsRecorder && isNewPost) {
       try {
         // 使用停留时间作为浏览时长（包含评论阅读时间）
-        await StatsRecorder.record({ posts: 1, durationMs: stayTime, hasError: false });
+        await statsRecorder.record({ posts: 1, durationMs: stayTime, hasError: false });
       } catch (e) {
         console.warn('[Stats] 记录失败:', e);
       }

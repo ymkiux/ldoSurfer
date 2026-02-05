@@ -191,6 +191,7 @@ class PopupController {
     this.accumulatedTime = 0;
     this.lastStartTime = null;
     this.logs = [];
+    this.lastLogTimes = {};
     this.dailyAutoToggleEl = null;
     this.dailyAutoTimeEl = null;
     this.guidePanelEl = null;
@@ -307,15 +308,17 @@ class PopupController {
     });
   }
 
-  sendMessageWithRetry(tabId, message, callback, retries = 3) {
+  sendMessageWithRetry(tabId, message, callback, retries = 3, silent = false) {
     chrome.tabs.sendMessage(tabId, message, (response) => {
       if (chrome.runtime.lastError) {
         if (retries > 0) {
           setTimeout(() => {
-            this.sendMessageWithRetry(tabId, message, callback, retries - 1);
+            this.sendMessageWithRetry(tabId, message, callback, retries - 1, silent);
           }, 500);
         } else {
-          this.log('请刷新页面后重试', 'error');
+          if (!silent) {
+            this.log('请刷新页面后重试', 'error');
+          }
         }
         return;
       }
@@ -335,7 +338,7 @@ class PopupController {
     }
     tabs.forEach((tab) => {
       if (!tab?.id) return;
-      this.sendMessageWithRetry(tab.id, { action: 'stop' });
+      this.sendMessageWithRetry(tab.id, { action: 'stop' }, null, 3, true);
     });
     this.isRunning = false;
     this.updateStatus();
@@ -483,6 +486,13 @@ class PopupController {
   }
 
   log(message, type = 'info') {
+    const now = Date.now();
+    const key = `${type}:${message}`;
+    const lastAt = this.lastLogTimes[key] || 0;
+    if (now - lastAt < 1500) {
+      return;
+    }
+    this.lastLogTimes[key] = now;
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     this.logs.unshift({ message, type, timestamp });
     if (this.logs.length > 30) this.logs.pop();

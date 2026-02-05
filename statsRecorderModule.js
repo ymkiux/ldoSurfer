@@ -1,6 +1,6 @@
 /**
- * 统计记录模块 - ES 模块版本
- * 专门供 content.js 通过动态 import 使用
+ * 统计记录模块 - 内容脚本版本
+ * 供 content.js 直接使用
  */
 
 // ============== statsStorage.js ==============
@@ -111,5 +111,4 @@ class StatsRecorder {
   }
 }
 
-// ES 模块导出
-export { StatsRecorder };
+window.StatsRecorder = StatsRecorder;
