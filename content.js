@@ -14,6 +14,12 @@ const DEFAULT_DAILY_AUTO = {
   count: 0,
   running: false
 };
+const DAILY_AUTO_IDLE_WAIT_MS = 10 * 60 * 1000;
+const DEFAULT_DAILY_AUTO_IDLE = {
+  lastActionAt: 0,
+  waitUntil: 0,
+  pending: false
+};
 
 const statsRecorder = typeof StatsRecorder === 'undefined' ? null : StatsRecorder;
 
@@ -31,9 +37,13 @@ class HumanBrowser {
       readDepth: 0.7,
       mouseMoveProbability: 0.3,
       clickProbability: 0.6,
-      quickMode: false
+      quickMode: false,
+      skipDailyIdleWait: false
     };
     this.dailyAuto = { ...DEFAULT_DAILY_AUTO };
+    this.dailyAutoWaitTimer = null;
+    this.idleStateSaveTimer = null;
+    this.activityHandler = null;
 
     this.init().catch((error) => {
       const messageText = error?.message || String(error);
@@ -117,7 +127,8 @@ class HumanBrowser {
       },
       accumulatedTime: 0,
       lastStartTime: null,
-      config: this.config
+      config: this.config,
+      dailyAutoIdle: { ...DEFAULT_DAILY_AUTO_IDLE }
     };
   }
 
@@ -208,6 +219,19 @@ class HumanBrowser {
     return config;
   }
 
+  normalizeDailyAutoIdle(raw) {
+    const base = raw && typeof raw === 'object' ? raw : {};
+    return {
+      lastActionAt: Number.isFinite(base.lastActionAt) ? base.lastActionAt : 0,
+      waitUntil: Number.isFinite(base.waitUntil) ? base.waitUntil : 0,
+      pending: base.pending === true
+    };
+  }
+
+  getDailyAutoWaitMs() {
+    return this.config.skipDailyIdleWait ? 0 : DAILY_AUTO_IDLE_WAIT_MS;
+  }
+
   async loadDailyAuto() {
     const result = await this.safeStorageGet([DAILY_AUTO_KEY]);
     const stored = result[DAILY_AUTO_KEY];
@@ -236,6 +260,135 @@ class HumanBrowser {
     return this.config.quickMode && !this.isDailyAutoRunning();
   }
 
+  initUserActivityTracking() {
+    if (this.activityHandler) return;
+    this.activityHandler = () => this.recordUserActivity();
+    const events = ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart', 'mousedown'];
+    events.forEach((eventName) => {
+      window.addEventListener(eventName, this.activityHandler, { passive: true, capture: true });
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.recordUserActivity();
+      }
+    });
+  }
+
+  recordUserActivity() {
+    if (!this.state?.dailyAutoIdle) return;
+    const now = Date.now();
+    this.state.dailyAutoIdle.lastActionAt = now;
+    if (this.state.dailyAutoIdle.pending) {
+      const waitMs = this.getDailyAutoWaitMs();
+      if (waitMs <= 0) {
+        this.tryStartPendingDailyAuto();
+      } else {
+        this.state.dailyAutoIdle.waitUntil = now + waitMs;
+        this.scheduleIdleStateSave();
+        this.scheduleDailyAutoWaitCheck();
+      }
+      return;
+    }
+  }
+
+  scheduleIdleStateSave() {
+    if (this.idleStateSaveTimer) return;
+    this.idleStateSaveTimer = setTimeout(() => {
+      this.idleStateSaveTimer = null;
+      if (this.state) {
+        this.saveState(this.state);
+      }
+    }, 500);
+  }
+
+  clearDailyAutoWaitTimer() {
+    if (this.dailyAutoWaitTimer) {
+      clearTimeout(this.dailyAutoWaitTimer);
+      this.dailyAutoWaitTimer = null;
+    }
+  }
+
+  scheduleDailyAutoWaitCheck() {
+    if (!this.state?.dailyAutoIdle?.pending) return;
+    const waitUntil = this.state.dailyAutoIdle.waitUntil;
+    if (!waitUntil) return;
+    this.clearDailyAutoWaitTimer();
+    const delay = Math.max(0, waitUntil - Date.now());
+    this.dailyAutoWaitTimer = setTimeout(() => {
+      this.tryStartPendingDailyAuto();
+    }, delay);
+  }
+
+  async tryStartPendingDailyAuto() {
+    if (!this.state?.dailyAutoIdle?.pending) return;
+    const waitMs = this.getDailyAutoWaitMs();
+    if (waitMs <= 0) {
+      await this.beginDailyAuto();
+      return;
+    }
+    const lastActionAt = this.state.dailyAutoIdle.lastActionAt || 0;
+    const waitUntil = Math.max(this.state.dailyAutoIdle.waitUntil || 0, lastActionAt + waitMs);
+    if (Date.now() < waitUntil) {
+      this.state.dailyAutoIdle.waitUntil = waitUntil;
+      this.scheduleIdleStateSave();
+      this.scheduleDailyAutoWaitCheck();
+      return;
+    }
+    await this.beginDailyAuto();
+  }
+
+  async beginDailyAuto() {
+    if (!this.state?.dailyAutoIdle) return;
+    this.state.dailyAutoIdle.pending = false;
+    this.state.dailyAutoIdle.waitUntil = 0;
+    this.clearDailyAutoWaitTimer();
+    await this.saveState(this.state);
+    if (!this.dailyAuto?.enabled) {
+      this.dailyAuto.running = false;
+      await this.saveDailyAuto(this.dailyAuto);
+      return;
+    }
+    if (await this.checkDailyAutoDeadline()) return;
+    if (!this.state.isRunning) {
+      await this.start();
+    }
+  }
+
+  async armDailyAutoWait() {
+    const waitMs = this.getDailyAutoWaitMs();
+    if (waitMs <= 0) {
+      await this.beginDailyAuto();
+      return;
+    }
+    if (!this.state?.dailyAutoIdle) return;
+    this.state.dailyAutoIdle.pending = true;
+    const now = Date.now();
+    const lastActionAt = this.state.dailyAutoIdle.lastActionAt || now;
+    if (!this.state.dailyAutoIdle.lastActionAt) {
+      this.state.dailyAutoIdle.lastActionAt = now;
+    }
+    const elapsed = now - lastActionAt;
+    if (elapsed >= waitMs) {
+      await this.beginDailyAuto();
+      return;
+    }
+    this.state.dailyAutoIdle.waitUntil = lastActionAt + waitMs;
+    await this.saveState(this.state);
+    this.scheduleDailyAutoWaitCheck();
+    this.sendMessage({ type: 'log', message: '等待 10 分钟无操作后执行每日任务' });
+  }
+
+  async resumePendingDailyAuto() {
+    if (!this.state?.dailyAutoIdle?.pending) return;
+    if (this.state.isRunning) {
+      this.state.dailyAutoIdle.pending = false;
+      this.state.dailyAutoIdle.waitUntil = 0;
+      this.scheduleIdleStateSave();
+      return;
+    }
+    await this.tryStartPendingDailyAuto();
+  }
+
   async updateDailyAutoProgress(isNewPost) {
     if (!this.isDailyAutoRunning()) return false;
     if (await this.checkDailyAutoDeadline()) return true;
@@ -251,6 +404,11 @@ class HumanBrowser {
     await this.saveDailyAuto(this.dailyAuto);
     this.state.isRunning = false;
     this.stopRunTimer();
+    if (this.state.dailyAutoIdle) {
+      this.state.dailyAutoIdle.pending = false;
+      this.state.dailyAutoIdle.waitUntil = 0;
+    }
+    this.clearDailyAutoWaitTimer();
     await this.saveState(this.state);
     this.sendMessage({ type: 'log', message: reason });
     this.sendMessage({ type: 'stopped' });
@@ -293,13 +451,16 @@ class HumanBrowser {
     // 加载保存的状态
     const state = await this.loadState();
     this.state = state;
-    this.config = state.config || this.config;
+    this.state.dailyAutoIdle = this.normalizeDailyAutoIdle(this.state.dailyAutoIdle);
+    this.config = { ...this.config, ...(state.config || {}) };
     this.dailyAuto = await this.loadDailyAuto();
+    this.initUserActivityTracking();
     if (this.state.isRunning && !this.state.lastStartTime) {
       this.state.lastStartTime = Date.now();
       await this.saveState(this.state);
     }
     await this.checkDailyAutoDeadline();
+    await this.resumePendingDailyAuto();
 
     console.log('[Linux DO Auto] 状态加载完成', {
       isRunning: state.isRunning,
@@ -870,8 +1031,7 @@ class HumanBrowser {
     this.dailyAuto.endTime = this.defaultDailyEndTime(this.dailyAuto.time);
     this.dailyAuto.running = true;
     await this.saveDailyAuto(this.dailyAuto);
-    if (await this.checkDailyAutoDeadline()) return;
-    await this.start();
+    await this.armDailyAutoWait();
   }
   async start() {
     console.log('[Linux DO Auto] 开始浏览，保留历史记录');
@@ -927,6 +1087,11 @@ class HumanBrowser {
 
     this.state.isRunning = false;
     this.stopRunTimer();
+    if (this.state.dailyAutoIdle) {
+      this.state.dailyAutoIdle.pending = false;
+      this.state.dailyAutoIdle.waitUntil = 0;
+    }
+    this.clearDailyAutoWaitTimer();
     await this.saveState(this.state);
     if (this.isDailyAutoRunning()) {
       this.dailyAuto.running = false;
@@ -939,10 +1104,14 @@ class HumanBrowser {
 
   // 更新配置
   async updateConfig(newConfig) {
+    const wasSkipDailyIdleWait = this.config.skipDailyIdleWait;
     this.config = { ...this.config, ...newConfig };
     this.state.config = this.config;
     await this.saveState(this.state);
     this.sendMessage({ type: 'configUpdated', config: this.config });
+    if (!wasSkipDailyIdleWait && this.config.skipDailyIdleWait && this.state?.dailyAutoIdle?.pending) {
+      await this.beginDailyAuto();
+    }
   }
 
   recordInternalError(reason, detail) {

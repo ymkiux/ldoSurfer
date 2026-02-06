@@ -80,7 +80,7 @@ function safeTabsQuery(queryInfo) {
 
 function safeTabsCreate(createProperties) {
   try {
-    chrome.tabs.create(createProperties);
+    safeChromePromise(chrome.tabs.create(createProperties), null);
   } catch (error) {
     console.warn('[Popup] tabs.create threw', error);
   }
@@ -269,7 +269,8 @@ class PopupController {
       maxPageStay: 15000,
       readDepth: 0.7,
       clickProbability: 0.6,
-      quickMode: false
+      quickMode: false,
+      skipDailyIdleWait: false
     };
 
     this.themeManager = new ThemeManager();
@@ -502,7 +503,8 @@ class PopupController {
       maxPageStay: maxPageStay,
       readDepth: 0.7,
       clickProbability: parseFloat(document.getElementById('clickProbability').value),
-      quickMode: document.getElementById('quickMode').checked
+      quickMode: document.getElementById('quickMode').checked,
+      skipDailyIdleWait: document.getElementById('skipDailyIdleWait').checked
     };
 
     if (newConfig.minCommentRead >= newConfig.maxCommentRead) {
@@ -750,7 +752,7 @@ class PopupController {
   loadSettings() {
     safeStorageGet(['linuxDoConfig']).then((result) => {
       if (result.linuxDoConfig) {
-        this.config = result.linuxDoConfig;
+        this.config = { ...this.config, ...result.linuxDoConfig };
         const comment1 = (this.config.minCommentRead || 1000) / 1000;
         const comment2 = (this.config.maxCommentRead || 4000) / 1000;
         document.getElementById('minCommentRead').value = Math.min(comment1, comment2);
@@ -761,6 +763,7 @@ class PopupController {
         document.getElementById('maxPageStay').value = Math.max(page1, page2);
         document.getElementById('clickProbability').value = this.config.clickProbability;
         document.getElementById('quickMode').checked = this.config.quickMode || false;
+        document.getElementById('skipDailyIdleWait').checked = this.config.skipDailyIdleWait || false;
       }
     });
   }
