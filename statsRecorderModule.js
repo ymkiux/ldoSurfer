@@ -11,16 +11,39 @@ class StatsStorage {
 
   static async get() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(this.STORAGE_KEY, (result) => {
-        const data = result[this.STORAGE_KEY] || this._createEmpty();
-        resolve(data);
-      });
+      if (!chrome?.storage?.local) {
+        resolve(this._createEmpty());
+        return;
+      }
+      try {
+        chrome.storage.local.get(this.STORAGE_KEY, (result) => {
+          const lastError = chrome.runtime?.lastError;
+          if (lastError) {
+            resolve(this._createEmpty());
+            return;
+          }
+          const data = result[this.STORAGE_KEY] || this._createEmpty();
+          resolve(data);
+        });
+      } catch (error) {
+        resolve(this._createEmpty());
+      }
     });
   }
 
   static async set(data) {
     return new Promise((resolve) => {
-      chrome.storage.local.set({ [this.STORAGE_KEY]: data }, () => resolve());
+      if (!chrome?.storage?.local) {
+        resolve();
+        return;
+      }
+      try {
+        chrome.storage.local.set({ [this.STORAGE_KEY]: data }, () => {
+          resolve();
+        });
+      } catch (error) {
+        resolve();
+      }
     });
   }
 

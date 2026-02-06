@@ -3,6 +3,8 @@
 
 const STORAGE_KEY = 'linux_do_auto_state';
 const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
+const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
+const INTERNAL_LOG_LIMIT = 50;
 const DEFAULT_DAILY_AUTO = {
   enabled: true,
   target: 50,
@@ -33,35 +35,95 @@ class HumanBrowser {
     };
     this.dailyAuto = { ...DEFAULT_DAILY_AUTO };
 
-    this.init();
+    this.init().catch((error) => {
+      const messageText = error?.message || String(error);
+      this.recordInternalError('init_failed', messageText);
+    });
+  }
+
+  isContextValid() {
+    return !!chrome?.runtime?.id;
+  }
+
+  safeStorageGet(keys) {
+    if (!chrome?.storage?.local) return Promise.resolve({});
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(keys, (result) => {
+          const lastError = chrome.runtime?.lastError;
+          if (lastError) {
+            this.recordInternalError('storage_get_failed', lastError.message || 'unknown');
+            resolve({});
+            return;
+          }
+          resolve(result || {});
+        });
+      } catch (error) {
+        const messageText = error?.message || String(error);
+        this.recordInternalError('storage_get_threw', messageText);
+        resolve({});
+      }
+    });
+  }
+
+  safeStorageSet(payload) {
+    if (!chrome?.storage?.local) return Promise.resolve();
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set(payload, () => {
+          const lastError = chrome.runtime?.lastError;
+          if (lastError) {
+            this.recordInternalError('storage_set_failed', lastError.message || 'unknown');
+          }
+          resolve();
+        });
+      } catch (error) {
+        const messageText = error?.message || String(error);
+        this.recordInternalError('storage_set_threw', messageText);
+        resolve();
+      }
+    });
+  }
+
+  safeStorageRemove(keys) {
+    if (!chrome?.storage?.local) return Promise.resolve();
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.remove(keys, () => {
+          const lastError = chrome.runtime?.lastError;
+          if (lastError) {
+            this.recordInternalError('storage_remove_failed', lastError.message || 'unknown');
+          }
+          resolve();
+        });
+      } catch (error) {
+        const messageText = error?.message || String(error);
+        this.recordInternalError('storage_remove_threw', messageText);
+        resolve();
+      }
+    });
   }
 
   // 从存储加载状态
   async loadState() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([STORAGE_KEY], (result) => {
-        const state = result[STORAGE_KEY] || {
-          isRunning: false,
-          browsedPosts: [],
-          stats: {
-            totalBrowsed: 0,
-            startTime: null,
-            errors: 0
-          },
-          accumulatedTime: 0,
-          lastStartTime: null,
-          config: this.config
-        };
-        resolve(state);
-      });
-    });
+    const result = await this.safeStorageGet([STORAGE_KEY]);
+    return result[STORAGE_KEY] || {
+      isRunning: false,
+      browsedPosts: [],
+      stats: {
+        totalBrowsed: 0,
+        startTime: null,
+        errors: 0
+      },
+      accumulatedTime: 0,
+      lastStartTime: null,
+      config: this.config
+    };
   }
 
   // 保存状态到存储
   async saveState(state) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({ [STORAGE_KEY]: state }, () => resolve());
-    });
+    await this.safeStorageSet({ [STORAGE_KEY]: state });
   }
 
   getTodayString() {
@@ -147,29 +209,23 @@ class HumanBrowser {
   }
 
   async loadDailyAuto() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
-        const stored = result[DAILY_AUTO_KEY];
-        const normalized = this.normalizeDailyAuto(stored);
-        const shouldSave =
-          !stored ||
-          stored.time !== normalized.time ||
-          stored.endTime !== normalized.endTime ||
-          stored.date !== normalized.date ||
-          stored.enabled !== normalized.enabled;
-        if (shouldSave) {
-          chrome.storage.local.set({ [DAILY_AUTO_KEY]: normalized }, () => resolve(normalized));
-          return;
-        }
-        resolve(normalized);
-      });
-    });
+    const result = await this.safeStorageGet([DAILY_AUTO_KEY]);
+    const stored = result[DAILY_AUTO_KEY];
+    const normalized = this.normalizeDailyAuto(stored);
+    const shouldSave =
+      !stored ||
+      stored.time !== normalized.time ||
+      stored.endTime !== normalized.endTime ||
+      stored.date !== normalized.date ||
+      stored.enabled !== normalized.enabled;
+    if (shouldSave) {
+      await this.safeStorageSet({ [DAILY_AUTO_KEY]: normalized });
+    }
+    return normalized;
   }
 
   async saveDailyAuto(config) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({ [DAILY_AUTO_KEY]: config }, () => resolve());
-    });
+    await this.safeStorageSet({ [DAILY_AUTO_KEY]: config });
   }
 
   isDailyAutoRunning() {
@@ -228,9 +284,7 @@ class HumanBrowser {
 
   // 清除状态
   async clearState() {
-    return new Promise((resolve) => {
-      chrome.storage.local.remove([STORAGE_KEY], () => resolve());
-    });
+    await this.safeStorageRemove([STORAGE_KEY]);
   }
 
   async init() {
@@ -797,12 +851,9 @@ class HumanBrowser {
   }
 
   async getCurrentBaseUrl() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(['useIdcflareSite'], (result) => {
-        const useIdcflare = result.useIdcflareSite || false;
-        resolve(useIdcflare ? 'https://idcflare.com' : 'https://linux.do');
-      });
-    });
+    const result = await this.safeStorageGet(['useIdcflareSite']);
+    const useIdcflare = result.useIdcflareSite || false;
+    return useIdcflare ? 'https://idcflare.com' : 'https://linux.do';
   }
 
   // 开始浏览（不清空历史记录）
@@ -894,12 +945,57 @@ class HumanBrowser {
     this.sendMessage({ type: 'configUpdated', config: this.config });
   }
 
-  sendMessage(message) {
-    chrome.runtime.sendMessage({
-      ...message,
-      source: 'content',
+  recordInternalError(reason, detail) {
+    if (!chrome?.storage?.local) return;
+    const entry = {
+      at: Date.now(),
+      reason,
+      detail,
       url: window.location.href
-    }).catch(() => {});
+    };
+    try {
+      chrome.storage.local.get([INTERNAL_LOG_KEY], (result) => {
+        const lastError = chrome.runtime?.lastError;
+        const baseLogs = lastError ? [] : (Array.isArray(result[INTERNAL_LOG_KEY]) ? result[INTERNAL_LOG_KEY] : []);
+        baseLogs.unshift(entry);
+        if (baseLogs.length > INTERNAL_LOG_LIMIT) baseLogs.length = INTERNAL_LOG_LIMIT;
+        try {
+          chrome.storage.local.set({ [INTERNAL_LOG_KEY]: baseLogs }, () => {
+            const setError = chrome.runtime?.lastError;
+            if (setError) {
+              return;
+            }
+          });
+        } catch (error) {
+          return;
+        }
+      });
+    } catch (error) {
+      return;
+    }
+  }
+
+  sendMessage(message) {
+    if (!chrome?.runtime?.id) {
+      this.recordInternalError('runtime_unavailable', 'runtime.id missing');
+      return;
+    }
+
+    try {
+      chrome.runtime.sendMessage({
+        ...message,
+        source: 'content',
+        url: window.location.href
+      }, () => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          this.recordInternalError('runtime_send_failed', lastError.message || 'unknown');
+        }
+      });
+    } catch (error) {
+      const messageText = error?.message || String(error);
+      this.recordInternalError('runtime_send_threw', messageText);
+    }
   }
 }
 
@@ -922,27 +1018,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  const safeReply = (promise, action) => {
+    promise.then(() => sendResponse({ success: true }))
+      .catch((error) => {
+        const messageText = error?.message || String(error);
+        browser.recordInternalError(`action_${action}_failed`, messageText);
+        sendResponse({ success: false, error: `${action}_failed` });
+      });
+  };
+
   switch (message.action) {
     case 'start':
-      browser.start().then(() => sendResponse({ success: true }));
+      safeReply(browser.start(), 'start');
       break;
 
     case 'resetAndStart':
-      browser.resetAndStart().then(() => sendResponse({ success: true }));
+      safeReply(browser.resetAndStart(), 'resetAndStart');
       break;
 
     case 'resetHistory':
       browser.state.browsedPosts = [];
       browser.state.stats.totalBrowsed = 0;
-      browser.saveState(browser.state).then(() => sendResponse({ success: true }));
+      safeReply(browser.saveState(browser.state), 'resetHistory');
       break;
 
     case 'stop':
-      browser.stop().then(() => sendResponse({ success: true }));
+      safeReply(browser.stop(), 'stop');
       break;
 
     case 'startDaily':
-      browser.startDaily(message.target, message.date).then(() => sendResponse({ success: true }));
+      safeReply(browser.startDaily(message.target, message.date), 'startDaily');
       break;
 
     case 'getConfig':
@@ -950,12 +1055,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
 
     case 'updateConfig':
-      browser.updateConfig(message.config).then(() => sendResponse({ success: true }));
+      safeReply(browser.updateConfig(message.config), 'updateConfig');
       break;
 
     case 'getStats':
       browser.loadState().then(state => {
         sendResponse({ stats: state.stats });
+      }).catch((error) => {
+        const messageText = error?.message || String(error);
+        browser.recordInternalError('action_getStats_failed', messageText);
+        sendResponse({ success: false, error: 'getStats_failed' });
       });
       break;
 

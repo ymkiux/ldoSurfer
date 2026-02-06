@@ -15,6 +15,76 @@ const DEFAULT_DAILY_AUTO = {
   count: 0,
   running: false
 };
+const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
+const INTERNAL_LOG_UI_KEY = 'linuxDoDebugUi';
+
+function safeStorageGet(keys) {
+  return new Promise((resolve) => {
+    if (!chrome?.storage?.local) {
+      resolve({});
+      return;
+    }
+    try {
+      chrome.storage.local.get(keys, (result) => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Popup] storage.get failed', lastError.message);
+          resolve({});
+          return;
+        }
+        resolve(result || {});
+      });
+    } catch (error) {
+      console.warn('[Popup] storage.get threw', error);
+      resolve({});
+    }
+  });
+}
+
+function safeStorageSet(payload) {
+  return new Promise((resolve) => {
+    if (!chrome?.storage?.local) {
+      resolve();
+      return;
+    }
+    try {
+      chrome.storage.local.set(payload, () => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Popup] storage.set failed', lastError.message);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn('[Popup] storage.set threw', error);
+      resolve();
+    }
+  });
+}
+
+function safeChromePromise(promise, fallback) {
+  return Promise.resolve(promise).catch((error) => {
+    console.warn('[Popup] chrome promise rejected', error);
+    return fallback;
+  });
+}
+
+function safeTabsQuery(queryInfo) {
+  try {
+    return safeChromePromise(chrome.tabs.query(queryInfo), []);
+  } catch (error) {
+    console.warn('[Popup] tabs.query threw', error);
+    return Promise.resolve([]);
+  }
+}
+
+function safeTabsCreate(createProperties) {
+  try {
+    chrome.tabs.create(createProperties);
+  } catch (error) {
+    console.warn('[Popup] tabs.create threw', error);
+  }
+}
 
 class ThemeManager {
   constructor() {
@@ -36,7 +106,7 @@ class ThemeManager {
   }
 
   loadStoredTheme() {
-    chrome.storage.local.get([this.storageKey], (result) => {
+    safeStorageGet([this.storageKey]).then((result) => {
       const storedId = result[this.storageKey];
       this.setTheme(this.isSupported(storedId) ? storedId : 'system', false);
     });
@@ -71,7 +141,7 @@ class ThemeManager {
     this.currentThemeId = targetId;
     this.markActiveCard(targetId);
     if (persist) {
-      chrome.storage.local.set({ [this.storageKey]: targetId });
+      safeStorageSet({ [this.storageKey]: targetId });
     }
 
     // 重新渲染统计页面的图表以应用新主题颜色
@@ -163,18 +233,13 @@ class SiteManager {
   }
 
   async loadFromStorage() {
-    return new Promise(resolve => {
-      chrome.storage.local.get([this.storageKey], (result) => {
-        resolve(result[this.storageKey]);
-      });
-    });
+    const result = await safeStorageGet([this.storageKey]);
+    return result[this.storageKey];
   }
 
   async saveToStorage() {
-    return new Promise(resolve => {
-      chrome.storage.local.set({
-        [this.storageKey]: this.useIdcflare
-      }, resolve);
+    await safeStorageSet({
+      [this.storageKey]: this.useIdcflare
     });
   }
 }
@@ -217,6 +282,7 @@ class PopupController {
     this.siteManager.init();
     this.initGuidePanel();
     this.bindEvents();
+    this.initInternalLogTools();
     this.initDailyAutoToggle();
     this.loadSettings();
     this.startTimer();
@@ -230,28 +296,34 @@ class PopupController {
   }
 
   async checkStatus() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await safeTabsQuery({ active: true, currentWindow: true });
 
     if (!tab.url || !this.siteManager.isCurrentSite(tab.url)) {
       return;
     }
 
-    return new Promise((resolve) => {
-      chrome.storage.local.get(['linux_do_auto_state'], (result) => {
-        if (result.linux_do_auto_state) {
-          const state = result.linux_do_auto_state;
-          this.isRunning = state.isRunning || false;
-          if (state.stats) {
-            this.stats.totalBrowsed = state.stats.totalBrowsed || 0;
-            this.stats.startTime = state.stats.startTime || null;
-            this.stats.errors = state.stats.errors || 0;
-          }
-          this.accumulatedTime = state.accumulatedTime || 0;
-          this.lastStartTime = state.lastStartTime || null;
-          this.updateStats();
-        }
-        resolve();
-      });
+    const result = await safeStorageGet(['linux_do_auto_state']);
+    if (result.linux_do_auto_state) {
+      const state = result.linux_do_auto_state;
+      this.isRunning = state.isRunning || false;
+      if (state.stats) {
+        this.stats.totalBrowsed = state.stats.totalBrowsed || 0;
+        this.stats.startTime = state.stats.startTime || null;
+        this.stats.errors = state.stats.errors || 0;
+      }
+      this.accumulatedTime = state.accumulatedTime || 0;
+      this.lastStartTime = state.lastStartTime || null;
+      this.updateStats();
+    }
+  }
+
+  initInternalLogTools() {
+    const toolsEl = document.getElementById('internalLogTools');
+    if (!toolsEl) return;
+    safeStorageGet([INTERNAL_LOG_UI_KEY]).then((result) => {
+      if (result[INTERNAL_LOG_UI_KEY]) {
+        toolsEl.removeAttribute('hidden');
+      }
     });
   }
 
@@ -263,16 +335,24 @@ class PopupController {
     document.getElementById('applySettings').addEventListener('click', () => this.applySettings());
     document.getElementById('clearLogs').addEventListener('click', () => this.clearLogs());
     document.getElementById('copyLogs').addEventListener('click', () => this.copyLogs());
+    const exportInternalLogs = document.getElementById('exportInternalLogs');
+    if (exportInternalLogs) {
+      exportInternalLogs.addEventListener('click', () => this.exportInternalLogs());
+    }
+    const clearInternalLogs = document.getElementById('clearInternalLogs');
+    if (clearInternalLogs) {
+      clearInternalLogs.addEventListener('click', () => this.clearInternalLogs());
+    }
     
     document.getElementById('openLatest').addEventListener('click', (e) => {
       e.preventDefault();
-      chrome.tabs.create({ url: this.siteManager.getLatestUrl() });
+      safeTabsCreate({ url: this.siteManager.getLatestUrl() });
     });
     const latestStats = document.getElementById('openLatestStats');
     if (latestStats) {
       latestStats.addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: this.siteManager.getLatestUrl() });
+        safeTabsCreate({ url: this.siteManager.getLatestUrl() });
       });
     }
 
@@ -295,7 +375,7 @@ class PopupController {
   }
 
   async start() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await safeTabsQuery({ active: true, currentWindow: true });
     if (!tab.url || !this.siteManager.isCurrentSite(tab.url)) {
       this.log(`请在 ${this.siteManager.getSiteName()} 页面使用`, 'error');
       return;
@@ -309,25 +389,35 @@ class PopupController {
   }
 
   sendMessageWithRetry(tabId, message, callback, retries = 3, silent = false) {
-    chrome.tabs.sendMessage(tabId, message, (response) => {
-      if (chrome.runtime.lastError) {
-        if (retries > 0) {
-          setTimeout(() => {
-            this.sendMessageWithRetry(tabId, message, callback, retries - 1, silent);
-          }, 500);
-        } else {
-          if (!silent) {
-            this.log('请刷新页面后重试', 'error');
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        if (chrome.runtime.lastError) {
+          if (retries > 0) {
+            setTimeout(() => {
+              this.sendMessageWithRetry(tabId, message, callback, retries - 1, silent);
+            }, 500);
+          } else {
+            if (!silent) {
+              this.log('请刷新页面后重试', 'error');
+            }
           }
+          return;
         }
-        return;
+        if (callback) callback(response);
+      });
+    } catch (error) {
+      if (retries > 0) {
+        setTimeout(() => {
+          this.sendMessageWithRetry(tabId, message, callback, retries - 1, silent);
+        }, 500);
+      } else if (!silent) {
+        this.log('请刷新页面后重试', 'error');
       }
-      if (callback) callback(response);
-    });
+    }
   }
 
   async stop() {
-    const tabs = await chrome.tabs.query({
+    const tabs = await safeTabsQuery({
       url: ['https://linux.do/*', 'https://idcflare.com/*']
     });
     if (!tabs.length) {
@@ -368,7 +458,7 @@ class PopupController {
   }
 
   async resetAndStart() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await safeTabsQuery({ active: true, currentWindow: true });
     if (!tab.url || !this.siteManager.isCurrentSite(tab.url)) {
       this.log(`请在 ${this.siteManager.getSiteName()} 页面使用`, 'error');
       return;
@@ -384,7 +474,7 @@ class PopupController {
   }
 
   async clearHistory() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await safeTabsQuery({ active: true, currentWindow: true });
     this.sendMessageWithRetry(tab.id, { action: 'resetHistory' }, (response) => {
       if (response?.success) {
         this.stats.totalBrowsed = 0;
@@ -427,11 +517,13 @@ class PopupController {
     this.config = newConfig;
     this.saveSettings();
 
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    chrome.tabs.sendMessage(tab.id, {
-      action: 'updateConfig',
-      config: this.config
-    });
+    const [tab] = await safeTabsQuery({ active: true, currentWindow: true });
+    if (tab?.id) {
+      this.sendMessageWithRetry(tab.id, {
+        action: 'updateConfig',
+        config: this.config
+      });
+    }
 
     this.log('设置已更新', 'info');
     
@@ -477,11 +569,11 @@ class PopupController {
   }
 
   saveRunTimeState() {
-    chrome.storage.local.get(['linux_do_auto_state'], (result) => {
+    safeStorageGet(['linux_do_auto_state']).then((result) => {
       const state = result.linux_do_auto_state || {};
       state.accumulatedTime = this.accumulatedTime;
       state.lastStartTime = this.lastStartTime;
-      chrome.storage.local.set({ linux_do_auto_state: state });
+      safeStorageSet({ linux_do_auto_state: state });
     });
   }
 
@@ -543,6 +635,34 @@ class PopupController {
     document.body.removeChild(textarea);
   }
 
+  exportInternalLogs() {
+    safeStorageGet([INTERNAL_LOG_KEY]).then((result) => {
+      const rawLogs = Array.isArray(result[INTERNAL_LOG_KEY]) ? result[INTERNAL_LOG_KEY] : [];
+      const lines = rawLogs.map((entry) => {
+        const at = entry?.at ? new Date(entry.at).toISOString() : '';
+        const reason = entry?.reason || 'unknown';
+        const detail = entry?.detail || '';
+        const url = entry?.url || '';
+        return `[${at}] ${reason} ${detail} ${url}`.trim();
+      });
+      const payload = lines.length ? lines.join('\n') : '[]';
+      const textarea = document.createElement('textarea');
+      textarea.value = payload;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try { document.execCommand('copy'); this.log('内部日志已复制', 'success'); } catch (err) {}
+      document.body.removeChild(textarea);
+    });
+  }
+
+  clearInternalLogs() {
+    safeStorageSet({ [INTERNAL_LOG_KEY]: [] }).then(() => {
+      this.log('内部日志已清空', 'info');
+    });
+  }
+
   initDailyAutoToggle() {
     this.dailyAutoToggleEl = document.getElementById('dailyAutoEnabled');
     this.dailyAutoTimeEl = document.getElementById('dailyAutoTime');
@@ -557,7 +677,7 @@ class PopupController {
   }
 
   loadDailyAutoConfig() {
-    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       this.dailyAutoToggleEl.checked = config.enabled !== false;
       config.time = this.normalizeDailyTime(config.time);
@@ -570,7 +690,7 @@ class PopupController {
         stored.endTime !== config.endTime ||
         stored.enabled !== config.enabled;
       if (shouldSave) {
-        chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
+        safeStorageSet({ [DAILY_AUTO_KEY]: config });
       }
     });
   }
@@ -604,16 +724,16 @@ class PopupController {
 
   saveDailyAutoTime(time) {
     const normalized = this.normalizeDailyTime(time);
-    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.time = normalized;
       config.endTime = this.defaultDailyEndTime(normalized);
-      chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
+      safeStorageSet({ [DAILY_AUTO_KEY]: config });
     });
   }
 
   saveDailyAutoConfig(enabled) {
-    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
+    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.enabled = enabled;
       config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
@@ -621,14 +741,14 @@ class PopupController {
       if (!enabled) {
         config.running = false;
       }
-      chrome.storage.local.set({ [DAILY_AUTO_KEY]: config });
+      safeStorageSet({ [DAILY_AUTO_KEY]: config });
     });
   }
 
-  saveSettings() { chrome.storage.local.set({ linuxDoConfig: this.config }); }
+  saveSettings() { safeStorageSet({ linuxDoConfig: this.config }); }
 
   loadSettings() {
-    chrome.storage.local.get(['linuxDoConfig'], (result) => {
+    safeStorageGet(['linuxDoConfig']).then((result) => {
       if (result.linuxDoConfig) {
         this.config = result.linuxDoConfig;
         const comment1 = (this.config.minCommentRead || 1000) / 1000;

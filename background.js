@@ -10,6 +10,50 @@ const DEFAULT_DAILY_AUTO = {
 };
 const DAILY_ALARM_NAME = 'linux-do-daily-auto';
 
+function safeStorageGet(keys) {
+  return new Promise((resolve) => {
+    if (!chrome?.storage?.local) {
+      resolve({});
+      return;
+    }
+    try {
+      chrome.storage.local.get(keys, (result) => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Background] storage.get failed', lastError.message);
+          resolve({});
+          return;
+        }
+        resolve(result || {});
+      });
+    } catch (error) {
+      console.warn('[Background] storage.get threw', error);
+      resolve({});
+    }
+  });
+}
+
+function safeStorageSet(payload) {
+  return new Promise((resolve) => {
+    if (!chrome?.storage?.local) {
+      resolve();
+      return;
+    }
+    try {
+      chrome.storage.local.set(payload, () => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Background] storage.set failed', lastError.message);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn('[Background] storage.set threw', error);
+      resolve();
+    }
+  });
+}
+
 function getTodayString() {
   const now = new Date();
   const year = now.getFullYear();
@@ -73,25 +117,19 @@ function normalizeDailyAuto(raw) {
 }
 
 function loadDailyAuto() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get([DAILY_AUTO_KEY], (result) => {
-      resolve(normalizeDailyAuto(result[DAILY_AUTO_KEY]));
-    });
+  return safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
+    return normalizeDailyAuto(result[DAILY_AUTO_KEY]);
   });
 }
 
 function saveDailyAuto(config) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [DAILY_AUTO_KEY]: config }, () => resolve());
-  });
+  return safeStorageSet({ [DAILY_AUTO_KEY]: config });
 }
 
 function getBaseUrl() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(['useIdcflareSite'], (result) => {
-      const useIdcflare = result.useIdcflareSite || false;
-      resolve(useIdcflare ? 'https://idcflare.com' : 'https://linux.do');
-    });
+  return safeStorageGet(['useIdcflareSite']).then((result) => {
+    const useIdcflare = result.useIdcflareSite || false;
+    return useIdcflare ? 'https://idcflare.com' : 'https://linux.do';
   });
 }
 
@@ -104,14 +142,24 @@ function scheduleDailyAlarm(config) {
 }
 
 function sendStartDailyMessage(tabId, payload, retries = 10) {
-  chrome.tabs.sendMessage(tabId, payload, () => {
-    if (chrome.runtime.lastError) {
-      if (retries > 0) {
-        setTimeout(() => sendStartDailyMessage(tabId, payload, retries - 1), 1000);
+  try {
+    chrome.tabs.sendMessage(tabId, payload, () => {
+      if (chrome.runtime.lastError) {
+        if (retries > 0) {
+          setTimeout(() => sendStartDailyMessage(tabId, payload, retries - 1), 1000);
+        } else {
+          console.warn('[Background] sendMessage failed', chrome.runtime.lastError.message);
+        }
+        return;
       }
-      return;
+    });
+  } catch (error) {
+    if (retries > 0) {
+      setTimeout(() => sendStartDailyMessage(tabId, payload, retries - 1), 1000);
+    } else {
+      console.warn('[Background] sendMessage threw', error);
     }
-  });
+  }
 }
 
 function waitForTabComplete(tabId) {
