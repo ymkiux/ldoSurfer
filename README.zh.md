@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="icons/logo.png" alt="logo" width="96">
+
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green?logo=google-chrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
