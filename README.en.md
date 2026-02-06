@@ -13,7 +13,7 @@
 
 ---
 
-[中文版](README.md) · English
+<p align="center">[中文版](README.md) · English</p>
 
 ## Overview
 
@@ -51,6 +51,7 @@ cd ldoSurfer
 | Scroll Depth | Page scroll depth ratio | 0.7 |
 | Click Probability | Probability to click into posts | 0.6 |
 | Quick Browse Mode | Skip comments, fast browse (5-10s dwell) | Disabled |
+| Immediate Switch Execution | Skip the 10-minute wait and start directly | Disabled |
 
 ## Usage Guide
 
