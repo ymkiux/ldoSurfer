@@ -86,14 +86,51 @@ function safeTabsCreate(createProperties) {
   }
 }
 
-class ThemeManager {
+function safeRuntimeSendMessage(message, fallback) {
+  try {
+    return safeChromePromise(chrome.runtime.sendMessage(message), fallback);
+  } catch (error) {
+    console.warn('[Popup] runtime.sendMessage threw', error);
+    return Promise.resolve(fallback);
+  }
+}
+
+class PopupPluginHost {
   constructor() {
+    this.m_plugins = [];
+  }
+
+  register(plugin) {
+    if (!plugin || this.m_plugins.includes(plugin)) return;
+    this.m_plugins.push(plugin);
+  }
+
+  emitTabChanged(tabName) {
+    this.m_plugins.forEach((plugin) => {
+      if (typeof plugin.onTabChanged === 'function') {
+        plugin.onTabChanged(tabName);
+      }
+    });
+  }
+
+  emitThemeChanged(themeId) {
+    this.m_plugins.forEach((plugin) => {
+      if (typeof plugin.onThemeChanged === 'function') {
+        plugin.onThemeChanged(themeId);
+      }
+    });
+  }
+}
+
+class ThemeManager {
+  constructor(options = {}) {
     this.storageKey = 'linuxDoTheme';
     this.themes = AVAILABLE_THEMES;
     this.currentThemeId = 'system';
     this.panelEl = null;
     this.openEl = null;
     this.closeEl = null;
+    this.m_onThemeChanged = typeof options.onThemeChanged === 'function' ? options.onThemeChanged : null;
   }
 
   init() {
@@ -145,6 +182,10 @@ class ThemeManager {
     }
 
     // 重新渲染统计页面的图表以应用新主题颜色
+    if (this.m_onThemeChanged) {
+      this.m_onThemeChanged(targetId);
+      return;
+    }
     const statsPanel = document.querySelector('[data-panel="stats"]');
     if (statsPanel && statsPanel.classList.contains('active') && typeof statsTab !== 'undefined') {
       statsTab._renderStats();
@@ -273,9 +314,16 @@ class PopupController {
       skipDailyIdleWait: false
     };
 
-    this.themeManager = new ThemeManager();
+    this.pluginHost = new PopupPluginHost();
+    this.themeManager = new ThemeManager({
+      onThemeChanged: (themeId) => this.pluginHost.emitThemeChanged(themeId)
+    });
     this.siteManager = new SiteManager();
     this.init();
+  }
+
+  registerPlugin(plugin) {
+    this.pluginHost.register(plugin);
   }
 
   init() {
@@ -292,7 +340,11 @@ class PopupController {
     });
     // 初始化统计模块
     if (typeof statsTab !== 'undefined') {
+      if (typeof statsTab.setTabChangeHandler === 'function') {
+        statsTab.setTabChangeHandler((tabName) => this.pluginHost.emitTabChanged(tabName));
+      }
       statsTab.init();
+      this.pluginHost.register(statsTab);
     }
   }
 
@@ -937,6 +989,10 @@ class InvitesBoard {
     this.clearScrolling();
   }
 
+  onTabChanged(tabName) {
+    this.setActive(tabName === 'invites');
+  }
+
   startAutoRefresh() {
     if (!this.m_refreshTimer) {
       this.m_refreshTimer = setInterval(() => this.refresh(false), this.m_refreshIntervalMs);
@@ -1016,7 +1072,7 @@ class InvitesBoard {
     this.renderStatus();
     this.renderLoading();
     try {
-      const html = await this.fetchInvitesHtml();
+      const html = await this.fetchInvitesHtmlWithFallback();
       const records = parseInvitesHtml(html);
       this.m_lastRecords = records;
       this.m_lastUpdatedAt = now;
@@ -1041,6 +1097,35 @@ class InvitesBoard {
       throw new Error(`请求失败: ${response.status} ${response.statusText}`);
     }
     return response.text();
+  }
+
+  async fetchInvitesHtmlWithFallback() {
+    try {
+      return await this.fetchInvitesHtml();
+    } catch (popupError) {
+      const tries = [1, 2];
+      let lastResult = null;
+      for (const tryNo of tries) {
+        lastResult = await safeRuntimeSendMessage({
+          source: 'popup',
+          type: 'fetchInvitesHtml',
+          url: INVITES_URL
+        }, null);
+
+        if (lastResult && lastResult.ok && typeof lastResult.html === 'string') {
+          return lastResult.html;
+        }
+
+        if (tryNo < tries.length) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      }
+
+      const backgroundMessage = lastResult?.error || 'Background fetch failed';
+      const error = new Error(`Invites fetch failed. popup=${popupError?.message || 'unknown'}; background=${backgroundMessage}`);
+      error.cause = { popupError, backgroundResult: lastResult };
+      throw error;
+    }
   }
 
   renderLoading() {
@@ -1194,6 +1279,7 @@ class InvitesBoard {
 const controller = new PopupController();
 const g_invitesBoard = new InvitesBoard();
 g_invitesBoard.init();
+controller.registerPlugin(g_invitesBoard);
 window.g_invitesBoard = g_invitesBoard;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

@@ -402,6 +402,16 @@ class StatsTab {
   constructor() {
     this.isInitialized = false;
     this.currentTab = 'control';
+    this.m_onTabChange = null;
+  }
+
+  setTabChangeHandler(handler) {
+    this.m_onTabChange = typeof handler === 'function' ? handler : null;
+  }
+
+  onThemeChanged() {
+    if (this.currentTab !== 'stats') return;
+    this._renderStats();
   }
 
   async init() {
@@ -446,8 +456,8 @@ class StatsTab {
     if (tabName === 'stats') {
       this._renderStats();
     }
-    if (window.g_invitesBoard && typeof window.g_invitesBoard.setActive === 'function') {
-      window.g_invitesBoard.setActive(tabName === 'invites');
+    if (this.m_onTabChange) {
+      this.m_onTabChange(tabName);
     }
   }
 

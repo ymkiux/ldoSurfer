@@ -9,6 +9,7 @@ const DEFAULT_DAILY_AUTO = {
   running: false
 };
 const DAILY_ALARM_NAME = 'linux-do-daily-auto';
+const INVITES_URL_REGEX = /^https:\/\/connect\.linux\.do\/dash\/invites(?:[/?#].*)?$/;
 
 function safeStorageGet(keys) {
   return new Promise((resolve) => {
@@ -126,6 +127,14 @@ function saveDailyAuto(config) {
   return safeStorageSet({ [DAILY_AUTO_KEY]: config });
 }
 
+function runSafeTask(task, label) {
+  Promise.resolve()
+    .then(() => task())
+    .catch((error) => {
+      console.warn(`[Background] ${label} failed`, error);
+    });
+}
+
 function getBaseUrl() {
   return safeStorageGet(['useIdcflareSite']).then((result) => {
     const useIdcflare = result.useIdcflareSite || false;
@@ -174,6 +183,28 @@ function waitForTabComplete(tabId) {
   });
 }
 
+function isAllowedInvitesUrl(url) {
+  return typeof url === 'string' && INVITES_URL_REGEX.test(url);
+}
+
+async function fetchInvitesHtmlByBackground(url) {
+  if (!isAllowedInvitesUrl(url)) {
+    throw new Error('Invalid invites url');
+  }
+
+  const response = await fetch(url, {
+    credentials: 'include',
+    cache: 'no-store',
+    redirect: 'follow'
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.text();
+}
+
 async function runDailyAuto() {
   const config = await loadDailyAuto();
   if (!config.enabled) return;
@@ -185,36 +216,60 @@ async function runDailyAuto() {
   await saveDailyAuto(config);
 
   const baseUrl = await getBaseUrl();
-  chrome.tabs.create({ url: `${baseUrl}/latest` }, async (tab) => {
-    if (!tab?.id) return;
-    await waitForTabComplete(tab.id);
-    sendStartDailyMessage(tab.id, {
-      action: 'startDaily',
-      target: config.target,
-      date: config.date
-    });
+  chrome.tabs.create({ url: `${baseUrl}/latest` }, (tab) => {
+    runSafeTask(async () => {
+      if (!tab?.id) return;
+      await waitForTabComplete(tab.id);
+      sendStartDailyMessage(tab.id, {
+        action: 'startDaily',
+        target: config.target,
+        date: config.date
+      });
+    }, 'tabs.create callback');
   });
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
-  const config = await loadDailyAuto();
-  await saveDailyAuto(config);
-  scheduleDailyAlarm(config);
+chrome.runtime.onInstalled.addListener(() => {
+  runSafeTask(async () => {
+    const config = await loadDailyAuto();
+    await saveDailyAuto(config);
+    scheduleDailyAlarm(config);
+  }, 'onInstalled');
 });
 
-chrome.runtime.onStartup.addListener(async () => {
-  const config = await loadDailyAuto();
-  await saveDailyAuto(config);
-  scheduleDailyAlarm(config);
+chrome.runtime.onStartup.addListener(() => {
+  runSafeTask(async () => {
+    const config = await loadDailyAuto();
+    await saveDailyAuto(config);
+    scheduleDailyAlarm(config);
+  }, 'onStartup');
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== DAILY_ALARM_NAME) return;
-  runDailyAuto();
+  runSafeTask(() => runDailyAuto(), 'onAlarm');
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.source !== 'popup' || message.type !== 'fetchInvitesHtml') {
+    return false;
+  }
+
+  fetchInvitesHtmlByBackground(message.url)
+    .then((html) => {
+      sendResponse({ ok: true, html });
+    })
+    .catch((error) => {
+      sendResponse({ ok: false, error: error?.message || 'Unknown error' });
+    });
+
+  return true;
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local') return;
-  if (!changes[DAILY_AUTO_KEY]) return;
-  scheduleDailyAlarm(changes[DAILY_AUTO_KEY].newValue);
+  runSafeTask(() => {
+    if (area !== 'local') return;
+    if (!changes[DAILY_AUTO_KEY]) return;
+    scheduleDailyAlarm(changes[DAILY_AUTO_KEY].newValue);
+  }, 'storage.onChanged');
 });
