@@ -17,6 +17,7 @@ const DEFAULT_DAILY_AUTO = {
 };
 const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_UI_KEY = 'linuxDoDebugUi';
+const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
 
 function safeStorageGet(keys) {
   return new Promise((resolve) => {
@@ -470,6 +471,7 @@ class PopupController {
   }
 
   async stop() {
+    await safeStorageSet({ [STOP_SIGNAL_KEY]: Date.now() });
     const tabs = await safeTabsQuery({
       url: ['https://linux.do/*', 'https://idcflare.com/*']
     });

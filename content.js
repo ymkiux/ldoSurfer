@@ -5,6 +5,7 @@ const STORAGE_KEY = 'linux_do_auto_state';
 const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
 const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_LIMIT = 50;
+const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
 const DEFAULT_DAILY_AUTO = {
   enabled: true,
   target: 50,
@@ -44,6 +45,11 @@ class HumanBrowser {
     this.dailyAutoWaitTimer = null;
     this.idleStateSaveTimer = null;
     this.activityHandler = null;
+    this.pendingSleeps = new Set();
+    this.lastStopSignalAt = 0;
+    this.storageChangeListenerAttached = false;
+    this.handleStorageChangedBound = this.handleStorageChanged.bind(this);
+    this.attachStorageChangeListener();
 
     this.init().catch((error) => {
       const messageText = error?.message || String(error);
@@ -403,6 +409,7 @@ class HumanBrowser {
     this.dailyAuto.running = false;
     await this.saveDailyAuto(this.dailyAuto);
     this.state.isRunning = false;
+    this.releasePendingSleeps();
     this.stopRunTimer();
     if (this.state.dailyAutoIdle) {
       this.state.dailyAutoIdle.pending = false;
@@ -451,6 +458,11 @@ class HumanBrowser {
     // 加载保存的状态
     const state = await this.loadState();
     this.state = state;
+    const stopSignalResult = await this.safeStorageGet([STOP_SIGNAL_KEY]);
+    this.lastStopSignalAt = Number(stopSignalResult[STOP_SIGNAL_KEY]) || 0;
+    if (this.state.isRunning && this.lastStopSignalAt && this.state.lastStartTime && this.lastStopSignalAt >= this.state.lastStartTime) {
+      await this.stop();
+    }
     this.state.dailyAutoIdle = this.normalizeDailyAutoIdle(this.state.dailyAutoIdle);
     this.config = { ...this.config, ...(state.config || {}) };
     this.dailyAuto = await this.loadDailyAuto();
@@ -539,7 +551,47 @@ class HumanBrowser {
   }
 
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => {
+      const sleepHandle = {
+        timerId: null,
+        resolve
+      };
+      sleepHandle.timerId = setTimeout(() => {
+        if (!this.pendingSleeps.delete(sleepHandle)) {
+          return;
+        }
+        resolve();
+      }, ms);
+      this.pendingSleeps.add(sleepHandle);
+    });
+  }
+
+  releasePendingSleeps() {
+    if (!this.pendingSleeps.size) return;
+    const pending = Array.from(this.pendingSleeps);
+    this.pendingSleeps.clear();
+    pending.forEach((sleepHandle) => {
+      clearTimeout(sleepHandle.timerId);
+      sleepHandle.resolve();
+    });
+  }
+
+  attachStorageChangeListener() {
+    if (this.storageChangeListenerAttached || !chrome?.storage?.onChanged) return;
+    chrome.storage.onChanged.addListener(this.handleStorageChangedBound);
+    this.storageChangeListenerAttached = true;
+  }
+
+  handleStorageChanged(changes, area) {
+    if (area !== 'local' || !changes?.[STOP_SIGNAL_KEY]) return;
+    const signal = Number(changes[STOP_SIGNAL_KEY].newValue) || 0;
+    if (!signal || signal <= this.lastStopSignalAt) return;
+    this.lastStopSignalAt = signal;
+    if (!this.state || (!this.state.isRunning && !this.isDailyAutoRunning())) return;
+    this.stop().catch((error) => {
+      const messageText = error?.message || String(error);
+      this.recordInternalError('stop_from_signal_failed', messageText);
+    });
   }
 
   getPostLinks() {
@@ -1086,6 +1138,7 @@ class HumanBrowser {
     console.log('[Linux DO Auto] 停止浏览');
 
     this.state.isRunning = false;
+    this.releasePendingSleeps();
     this.stopRunTimer();
     if (this.state.dailyAutoIdle) {
       this.state.dailyAutoIdle.pending = false;
