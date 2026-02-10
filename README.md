@@ -31,6 +31,14 @@ ldoSurfer is a Chrome browser extension that automatically browses linux.do comm
 - **Real-time Monitoring Panel** - Browse statistics, activity logs, parameter configuration
 - **Minimalist UI Design** - Compact window, modern black & white color scheme
 
+## Release Notes
+
+### 2026-02-10
+
+- Added an exact ID (username) input for the Invites Leaderboard.
+- The input is shown only when valid invite records are available.
+- Aligned the input style with existing controls to keep the UI consistent.
+
 ## Quick Start
 
 ```bash
