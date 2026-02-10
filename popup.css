@@ -1128,6 +1128,31 @@ body.invites-scrolling .guide-switcher {
   accent-color: var(--accent);
 }
 
+.invites-exact-id {
+  height: 28px;
+  min-width: 112px;
+  max-width: 132px;
+  line-height: 28px;
+  border: 1px solid var(--color-divider);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 10px;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.invites-exact-id::placeholder {
+  color: var(--text-tertiary);
+}
+
+.invites-exact-id:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+  background: var(--bg-input-active);
+}
+
 .invites-refresh {
   height: 28px;
   line-height: 28px;
@@ -1399,6 +1424,11 @@ body.invites-scrolling .guide-switcher {
     flex-wrap: wrap;
     justify-content: flex-start;
     gap: 6px;
+  }
+
+  .invites-exact-id {
+    min-width: 106px;
+    max-width: 100%;
   }
 
   .invites-cards {

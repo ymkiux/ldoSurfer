@@ -938,6 +938,7 @@ class InvitesBoard {
     this.m_refreshBtn = null;
     this.m_sortEl = null;
     this.m_filterEl = null;
+    this.m_exactIdEl = null;
     this.m_scrollTimer = null;
     this.m_isScrolling = false;
     this.m_scrollHandler = null;
@@ -952,6 +953,7 @@ class InvitesBoard {
     this.m_nextRefreshAt = 0;
     this.m_sortKey = 'used';
     this.m_filterUsed = false;
+    this.m_exactId = '';
     this.m_refreshIntervalMs = 5 * 60 * 1000;
   }
 
@@ -961,10 +963,13 @@ class InvitesBoard {
     this.m_refreshBtn = document.getElementById('invitesRefresh');
     this.m_sortEl = document.getElementById('invitesSort');
     this.m_filterEl = document.getElementById('invitesFilterUsed');
-    if (!this.m_bodyEl || !this.m_statusEl || !this.m_refreshBtn || !this.m_sortEl || !this.m_filterEl) return;
+    this.m_exactIdEl = document.getElementById('invitesExactId');
+    if (!this.m_bodyEl || !this.m_statusEl || !this.m_refreshBtn || !this.m_sortEl || !this.m_filterEl || !this.m_exactIdEl) return;
     this.m_statusBaseText = (this.m_statusEl.textContent || '').trim();
     this.m_sortEl.value = this.m_sortKey;
     this.m_filterEl.checked = this.m_filterUsed;
+    this.m_exactIdEl.value = this.m_exactId;
+    this.toggleExactIdInput(false);
     this.m_refreshBtn.addEventListener('click', () => this.refresh(true));
     this.m_sortEl.addEventListener('change', () => {
       this.m_sortKey = this.m_sortEl.value;
@@ -974,7 +979,16 @@ class InvitesBoard {
       this.m_filterUsed = this.m_filterEl.checked;
       this.renderFromCache();
     });
+    this.m_exactIdEl.addEventListener('input', () => {
+      this.m_exactId = (this.m_exactIdEl.value || '').trim().toLowerCase();
+      this.renderFromCache();
+    });
     this.m_scrollHandler = () => this.handleScroll();
+  }
+
+  toggleExactIdInput(visible) {
+    if (!this.m_exactIdEl) return;
+    this.m_exactIdEl.hidden = !visible;
   }
 
   setActive(active) {
@@ -1056,6 +1070,9 @@ class InvitesBoard {
     if (this.m_filterUsed) {
       list = list.filter(item => item.totalUsed > 0);
     }
+    if (this.m_exactId) {
+      list = list.filter(item => (item.userName || '').toLowerCase() === this.m_exactId);
+    }
     return sortInviteLeaderboard(list, this.m_sortKey);
   }
 
@@ -1079,8 +1096,9 @@ class InvitesBoard {
       this.m_lastRecords = records;
       this.m_lastUpdatedAt = now;
       if (records.length === 0) {
+        this.toggleExactIdInput(false);
         this.renderEmpty('未找到邀请记录，可能未登录或无权限');
-      this.updateStatus('打开邀请页');
+        this.updateStatus('打开邀请页');
         return;
       }
       const leaderboard = this.prepareLeaderboard(records);
@@ -1132,11 +1150,13 @@ class InvitesBoard {
 
   renderLoading() {
     if (!this.m_bodyEl) return;
+    this.toggleExactIdInput(false);
     this.m_bodyEl.innerHTML = '<div class="invites-loading">加载中...</div>';
   }
 
   renderEmpty(message) {
     if (!this.m_bodyEl) return;
+    this.toggleExactIdInput(false);
     this.m_bodyEl.innerHTML = `
       <div class="invites-empty">
         <div>${message}</div>
@@ -1148,6 +1168,7 @@ class InvitesBoard {
   renderError(error) {
     console.error('[Invites] 加载失败', error);
     if (!this.m_bodyEl) return;
+    this.toggleExactIdInput(false);
     this.m_bodyEl.innerHTML = `
       <div class="invites-error">
         <a class="invites-action" href="${INVITES_URL}" target="_blank">打开邀请页</a>
@@ -1158,9 +1179,21 @@ class InvitesBoard {
 
   renderTable(leaderboard, totalRecords, now) {
     if (!this.m_bodyEl) return;
+    const hasValidRecords = totalRecords > 0;
+    this.toggleExactIdInput(hasValidRecords);
     if (leaderboard.length === 0) {
-      const message = this.m_filterUsed ? '筛选后无数据' : '暂无榜单数据';
-      this.renderEmpty(message);
+      const message = this.m_exactId
+        ? '未找到该 ID(用户名)'
+        : (this.m_filterUsed ? '筛选后无数据' : '暂无榜单数据');
+      if (hasValidRecords) {
+        this.m_bodyEl.innerHTML = `
+          <div class="invites-empty">
+            <div>${message}</div>
+          </div>
+        `;
+      } else {
+        this.renderEmpty(message);
+      }
       this.updateStatus(`更新 ${this.formatTime(now)}`);
       return;
     }
