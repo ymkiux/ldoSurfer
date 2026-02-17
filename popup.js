@@ -1,4 +1,4 @@
-// Linux DO 自动浏览 - Popup Script (极简风格)
+﻿// Linux DO 自动浏览 - Popup Script (极简风格)
 
 const AVAILABLE_THEMES = [
   { id: 'system', name: '跟随系统' },
@@ -13,7 +13,8 @@ const DEFAULT_DAILY_AUTO = {
   endTime: '19:00',
   date: '',
   count: 0,
-  running: false
+  running: false,
+  requireHidden: true
 };
 const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_UI_KEY = 'linuxDoDebugUi';
@@ -301,6 +302,7 @@ class PopupController {
     this.lastLogTimes = {};
     this.dailyAutoToggleEl = null;
     this.dailyAutoTimeEl = null;
+    this.dailyAutoRequireHiddenEl = null;
     this.guidePanelEl = null;
     this.guideOpenEl = null;
     this.guideCloseEl = null;
@@ -619,8 +621,11 @@ class PopupController {
       }
       const minutes = Math.floor(totalTime / 60000);
       const seconds = Math.floor((totalTime % 60000) / 1000);
-      document.getElementById('runTime').textContent =
-        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      const runTimeEl = document.getElementById('runTime');
+      if (runTimeEl) {
+        runTimeEl.textContent =
+          `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
     }, 1000);
   }
 
@@ -722,6 +727,7 @@ class PopupController {
   initDailyAutoToggle() {
     this.dailyAutoToggleEl = document.getElementById('dailyAutoEnabled');
     this.dailyAutoTimeEl = document.getElementById('dailyAutoTime');
+    this.dailyAutoRequireHiddenEl = document.getElementById('dailyAutoRequireHidden');
     if (!this.dailyAutoToggleEl || !this.dailyAutoTimeEl) return;
     this.loadDailyAutoConfig();
     this.dailyAutoToggleEl.addEventListener('change', (e) => {
@@ -730,12 +736,20 @@ class PopupController {
     this.dailyAutoTimeEl.addEventListener('change', (e) => {
       this.saveDailyAutoTime(e.target.value);
     });
+    if (this.dailyAutoRequireHiddenEl) {
+      this.dailyAutoRequireHiddenEl.addEventListener('change', (e) => {
+        this.saveDailyAutoRequireHidden(e.target.checked);
+      });
+    }
   }
 
   loadDailyAutoConfig() {
     safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       this.dailyAutoToggleEl.checked = config.enabled !== false;
+      if (this.dailyAutoRequireHiddenEl) {
+        this.dailyAutoRequireHiddenEl.checked = config.requireHidden === true;
+      }
       config.time = this.normalizeDailyTime(config.time);
       config.endTime = this.defaultDailyEndTime(config.time);
       this.dailyAutoTimeEl.value = config.time;
@@ -744,7 +758,8 @@ class PopupController {
         !stored ||
         stored.time !== config.time ||
         stored.endTime !== config.endTime ||
-        stored.enabled !== config.enabled;
+        stored.enabled !== config.enabled ||
+        stored.requireHidden !== config.requireHidden;
       if (shouldSave) {
         safeStorageSet({ [DAILY_AUTO_KEY]: config });
       }
@@ -792,11 +807,24 @@ class PopupController {
     safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.enabled = enabled;
+      if (this.dailyAutoRequireHiddenEl) {
+        config.requireHidden = this.dailyAutoRequireHiddenEl.checked;
+      }
       config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
       config.endTime = this.defaultDailyEndTime(config.time);
       if (!enabled) {
         config.running = false;
       }
+      safeStorageSet({ [DAILY_AUTO_KEY]: config });
+    });
+  }
+
+  saveDailyAutoRequireHidden(requireHidden) {
+    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
+      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
+      config.requireHidden = requireHidden;
+      config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
+      config.endTime = this.defaultDailyEndTime(config.time);
       safeStorageSet({ [DAILY_AUTO_KEY]: config });
     });
   }
@@ -1351,3 +1379,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
+
+
+
+

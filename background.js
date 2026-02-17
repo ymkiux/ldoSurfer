@@ -1,4 +1,6 @@
-const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
+﻿const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
+const DAILY_PENDING_KEY = 'linuxDoDailyAutoPending';
+const SITE_ACTIVITY_KEY = 'linuxDoSiteActivity';
 const DEFAULT_DAILY_AUTO = {
   enabled: true,
   target: 50,
@@ -6,10 +8,15 @@ const DEFAULT_DAILY_AUTO = {
   endTime: '19:00',
   date: '',
   count: 0,
-  running: false
+  running: false,
+  requireHidden: true
 };
 const DAILY_ALARM_NAME = 'linux-do-daily-auto';
+const DAILY_PENDING_ALARM_NAME = 'linux-do-daily-auto-pending';
 const INVITES_URL_REGEX = /^https:\/\/connect\.linux\.do\/dash\/invites(?:[/?#].*)?$/;
+const SITE_URL_REGEX = /^https:\/\/(linux\.do|idcflare\.com)(\/|$)/;
+const SITE_BACKGROUND_WAIT_MS = 10 * 60 * 1000;
+const SITE_ACTIVITY_TTL_MS = 24 * 60 * 60 * 1000;
 
 function safeStorageGet(keys) {
   return new Promise((resolve) => {
@@ -106,6 +113,7 @@ function normalizeDailyAuto(raw) {
   const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
   config.time = normalizeDailyTime(config.time);
   config.endTime = defaultDailyEndTime(config.time);
+  config.requireHidden = config.requireHidden === true;
   if (config.date !== today) {
     config.date = today;
     config.count = 0;
@@ -125,6 +133,146 @@ function loadDailyAuto() {
 
 function saveDailyAuto(config) {
   return safeStorageSet({ [DAILY_AUTO_KEY]: config });
+}
+
+function normalizeSiteActivity(raw) {
+  const base = raw && typeof raw === 'object' ? raw : {};
+  const rawTabs = base.tabs && typeof base.tabs === 'object' ? base.tabs : {};
+  const tabs = {};
+  Object.keys(rawTabs).forEach((tabId) => {
+    const entry = rawTabs[tabId];
+    if (!entry || typeof entry !== 'object') return;
+    tabs[tabId] = {
+      visible: entry.visible === true,
+      lastVisibleAt: Number.isFinite(entry.lastVisibleAt) ? entry.lastVisibleAt : 0,
+      lastHiddenAt: Number.isFinite(entry.lastHiddenAt) ? entry.lastHiddenAt : 0,
+      lastActivityAt: Number.isFinite(entry.lastActivityAt) ? entry.lastActivityAt : 0,
+      lastSeenAt: Number.isFinite(entry.lastSeenAt) ? entry.lastSeenAt : 0
+    };
+  });
+  return { tabs };
+}
+
+function loadSiteActivity() {
+  return safeStorageGet([SITE_ACTIVITY_KEY]).then((result) => {
+    return normalizeSiteActivity(result[SITE_ACTIVITY_KEY]);
+  });
+}
+
+function saveSiteActivity(activity) {
+  return safeStorageSet({ [SITE_ACTIVITY_KEY]: activity });
+}
+
+function pruneSiteActivity(activity, now) {
+  const tabs = activity.tabs || {};
+  Object.keys(tabs).forEach((tabId) => {
+    const entry = tabs[tabId];
+    const lastSeenAt = Number.isFinite(entry?.lastSeenAt) ? entry.lastSeenAt : 0;
+    if (!lastSeenAt || now - lastSeenAt > SITE_ACTIVITY_TTL_MS) {
+      delete tabs[tabId];
+    }
+  });
+}
+
+function updateTabEntry(activity, tabId, patch) {
+  const tabs = activity.tabs || (activity.tabs = {});
+  const key = String(tabId);
+  const now = Number.isFinite(patch?.at) ? patch.at : Date.now();
+  const entry = tabs[key] || {
+    visible: false,
+    lastVisibleAt: 0,
+    lastHiddenAt: 0,
+    lastActivityAt: 0,
+    lastSeenAt: 0
+  };
+  if (typeof patch?.visible === 'boolean') {
+    entry.visible = patch.visible;
+    if (patch.visible) {
+      entry.lastVisibleAt = now;
+    } else {
+      entry.lastHiddenAt = now;
+    }
+  }
+  if (Number.isFinite(patch?.activityAt)) {
+    entry.lastActivityAt = patch.activityAt;
+  }
+  entry.lastSeenAt = now;
+  tabs[key] = entry;
+}
+
+async function recordTabVisibility(tabId, visible, at) {
+  const now = Number.isFinite(at) ? at : Date.now();
+  const activity = await loadSiteActivity();
+  pruneSiteActivity(activity, now);
+  updateTabEntry(activity, tabId, { visible, at: now, activityAt: visible ? now : undefined });
+  await saveSiteActivity(activity);
+}
+
+async function recordTabActivity(tabId, at) {
+  const now = Number.isFinite(at) ? at : Date.now();
+  const activity = await loadSiteActivity();
+  pruneSiteActivity(activity, now);
+  updateTabEntry(activity, tabId, { activityAt: now, at: now });
+  await saveSiteActivity(activity);
+}
+
+function getSiteBackgroundInfo(activity, now) {
+  const entries = Object.values(activity.tabs || {});
+  let anyVisible = false;
+  let lastVisibleAt = 0;
+  let lastActivityAt = 0;
+  let lastSeenAt = 0;
+  entries.forEach((entry) => {
+    if (entry.visible) anyVisible = true;
+    if (entry.lastVisibleAt > lastVisibleAt) lastVisibleAt = entry.lastVisibleAt;
+    if (entry.lastActivityAt > lastActivityAt) lastActivityAt = entry.lastActivityAt;
+    if (entry.lastSeenAt > lastSeenAt) lastSeenAt = entry.lastSeenAt;
+  });
+  if (anyVisible) {
+    return { ready: false, readyAt: now + SITE_BACKGROUND_WAIT_MS, reason: 'visible' };
+  }
+  if (!entries.length) {
+    return { ready: false, readyAt: now + SITE_BACKGROUND_WAIT_MS, reason: 'noData' };
+  }
+  const lastInteractiveAt = Math.max(lastVisibleAt, lastActivityAt, lastSeenAt);
+  if (!lastInteractiveAt) {
+    return { ready: false, readyAt: now + SITE_BACKGROUND_WAIT_MS, reason: 'noData' };
+  }
+  const readyAt = lastInteractiveAt + SITE_BACKGROUND_WAIT_MS;
+  return { ready: now >= readyAt, readyAt, reason: now >= readyAt ? 'ready' : 'recentActivity' };
+}
+
+function normalizeDailyPending(raw) {
+  const base = raw && typeof raw === 'object' ? raw : {};
+  return {
+    pending: base.pending === true,
+    requestedAt: Number.isFinite(base.requestedAt) ? base.requestedAt : 0
+  };
+}
+
+function loadDailyPending() {
+  return safeStorageGet([DAILY_PENDING_KEY]).then((result) => {
+    return normalizeDailyPending(result[DAILY_PENDING_KEY]);
+  });
+}
+
+function saveDailyPending(pending) {
+  return safeStorageSet({ [DAILY_PENDING_KEY]: pending });
+}
+
+function clearDailyPending() {
+  if (chrome?.alarms?.clear) {
+    chrome.alarms.clear(DAILY_PENDING_ALARM_NAME);
+  }
+  return saveDailyPending({ pending: false, requestedAt: 0 });
+}
+
+function schedulePendingAlarm(whenMs) {
+  if (!chrome?.alarms?.create) return;
+  if (!Number.isFinite(whenMs)) return;
+  const now = Date.now();
+  const when = Math.max(whenMs, now + 1000);
+  chrome.alarms.create(DAILY_PENDING_ALARM_NAME, { when });
 }
 
 function runSafeTask(task, label) {
@@ -187,6 +335,10 @@ function isAllowedInvitesUrl(url) {
   return typeof url === 'string' && INVITES_URL_REGEX.test(url);
 }
 
+function isTargetSiteUrl(url) {
+  return typeof url === 'string' && SITE_URL_REGEX.test(url);
+}
+
 async function fetchInvitesHtmlByBackground(url) {
   if (!isAllowedInvitesUrl(url)) {
     throw new Error('Invalid invites url');
@@ -207,26 +359,95 @@ async function fetchInvitesHtmlByBackground(url) {
 
 async function runDailyAuto() {
   const config = await loadDailyAuto();
-  if (!config.enabled) return;
-
+  if (!config.enabled) {
+    await clearDailyPending();
+    return;
+  }
+  if (config.running) {
+    await clearDailyPending();
+    return;
+  }
+  const now = Date.now();
   const today = getTodayString();
   config.date = today;
   config.count = 0;
+  config.time = normalizeDailyTime(config.time);
+  config.endTime = defaultDailyEndTime(config.time);
+  config.requireHidden = config.requireHidden === true;
+
+  if (config.requireHidden) {
+    const pending = await loadDailyPending();
+    const activity = await loadSiteActivity();
+    pruneSiteActivity(activity, now);
+    const backgroundInfo = getSiteBackgroundInfo(activity, now);
+    let ready = backgroundInfo.ready;
+    let readyAt = backgroundInfo.readyAt;
+    if (!ready && backgroundInfo.reason === 'noData' && pending.pending && pending.requestedAt) {
+      const noDataReadyAt = pending.requestedAt + SITE_BACKGROUND_WAIT_MS;
+      if (now >= noDataReadyAt) {
+        ready = true;
+      } else {
+        readyAt = noDataReadyAt;
+      }
+    }
+    if (!ready) {
+      if (!pending.pending || !pending.requestedAt) {
+        await saveDailyPending({ pending: true, requestedAt: now });
+      }
+      if (Number.isFinite(readyAt)) {
+        schedulePendingAlarm(readyAt);
+      }
+      return;
+    }
+  }
+
+  await clearDailyPending();
   config.running = true;
   await saveDailyAuto(config);
 
   const baseUrl = await getBaseUrl();
-  chrome.tabs.create({ url: `${baseUrl}/latest` }, (tab) => {
+  chrome.tabs.create({ url: `${baseUrl}/latest`, active: config.requireHidden !== true }, (tab) => {
     runSafeTask(async () => {
       if (!tab?.id) return;
       await waitForTabComplete(tab.id);
       sendStartDailyMessage(tab.id, {
         action: 'startDaily',
         target: config.target,
-        date: config.date
+        date: config.date,
+        skipIdleWait: config.requireHidden === true
       });
     }, 'tabs.create callback');
   });
+}
+
+async function runPendingDailyAuto() {
+  const pending = await loadDailyPending();
+  if (!pending.pending) return;
+  await runDailyAuto();
+}
+
+async function handleContentMessage(message, sender) {
+  const tabId = sender?.tab?.id;
+  if (!tabId) return;
+  const tabUrl = sender?.tab?.url;
+  if (!isTargetSiteUrl(tabUrl)) return;
+  if (message.type === 'siteVisibility') {
+    await recordTabVisibility(tabId, message.visible === true, Number(message.at));
+    await runPendingDailyAuto();
+    return;
+  }
+  if (message.type === 'siteActivity') {
+    await recordTabActivity(tabId, Number(message.at));
+  }
+}
+
+async function removeTabActivity(tabId) {
+  const activity = await loadSiteActivity();
+  const key = String(tabId);
+  if (activity.tabs && activity.tabs[key]) {
+    delete activity.tabs[key];
+    await saveSiteActivity(activity);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -250,7 +471,30 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   runSafeTask(() => runDailyAuto(), 'onAlarm');
 });
 
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== DAILY_PENDING_ALARM_NAME) return;
+  runSafeTask(() => runPendingDailyAuto(), 'onPendingAlarm');
+});
+
+if (chrome?.tabs?.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    runSafeTask(() => removeTabActivity(tabId), 'tabs.onRemoved');
+  });
+}
+
+if (chrome?.tabs?.onUpdated) {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (!changeInfo?.url) return;
+    if (isTargetSiteUrl(changeInfo.url)) return;
+    runSafeTask(() => removeTabActivity(tabId), 'tabs.onUpdated');
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.source === 'content') {
+    runSafeTask(() => handleContentMessage(message, sender), 'contentMessage');
+    return false;
+  }
   if (!message || message.source !== 'popup' || message.type !== 'fetchInvitesHtml') {
     return false;
   }
@@ -273,3 +517,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     scheduleDailyAlarm(changes[DAILY_AUTO_KEY].newValue);
   }, 'storage.onChanged');
 });
+
+
+
+
+
+

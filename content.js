@@ -1,4 +1,4 @@
-// Linux DO 自动浏览 - Content Script
+﻿// Linux DO 自动浏览 - Content Script
 // 使用持久化存储，支持页面跳转后继续运行
 
 const STORAGE_KEY = 'linux_do_auto_state';
@@ -13,9 +13,11 @@ const DEFAULT_DAILY_AUTO = {
   endTime: '19:00',
   date: '',
   count: 0,
-  running: false
+  running: false,
+  requireHidden: true
 };
 const DAILY_AUTO_IDLE_WAIT_MS = 10 * 60 * 1000;
+const SITE_ACTIVITY_REPORT_INTERVAL_MS = 15 * 1000;
 const DEFAULT_DAILY_AUTO_IDLE = {
   lastActionAt: 0,
   waitUntil: 0,
@@ -45,6 +47,8 @@ class HumanBrowser {
     this.dailyAutoWaitTimer = null;
     this.idleStateSaveTimer = null;
     this.activityHandler = null;
+    this.lastActivityReportAt = 0;
+    this.lastVisibilityReported = null;
     this.pendingSleeps = new Set();
     this.lastStopSignalAt = 0;
     this.storageChangeListenerAttached = false;
@@ -210,6 +214,7 @@ class HumanBrowser {
     const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
     config.time = this.normalizeDailyTime(config.time);
     config.endTime = this.defaultDailyEndTime(config.time);
+    config.requireHidden = config.requireHidden === true;
     const normalizedDate = this.parseDateString(config.date) ? config.date : today;
     config.date = normalizedDate;
     const window = this.getDailyAutoWindow(config.date, config.time, config.endTime);
@@ -274,14 +279,17 @@ class HumanBrowser {
       window.addEventListener(eventName, this.activityHandler, { passive: true, capture: true });
     });
     document.addEventListener('visibilitychange', () => {
+      this.reportVisibilityState();
       if (document.visibilityState === 'visible') {
         this.recordUserActivity();
       }
     });
+    this.reportVisibilityState(true);
   }
 
   recordUserActivity() {
     if (!this.state?.dailyAutoIdle) return;
+    this.reportSiteActivity();
     const now = Date.now();
     this.state.dailyAutoIdle.lastActionAt = now;
     if (this.state.dailyAutoIdle.pending) {
@@ -293,8 +301,21 @@ class HumanBrowser {
         this.scheduleIdleStateSave();
         this.scheduleDailyAutoWaitCheck();
       }
-      return;
     }
+  }
+
+  reportVisibilityState(force = false) {
+    const visible = document.visibilityState === 'visible';
+    if (!force && this.lastVisibilityReported === visible) return;
+    this.lastVisibilityReported = visible;
+    this.sendMessage({ type: 'siteVisibility', visible, at: Date.now() });
+  }
+
+  reportSiteActivity() {
+    const now = Date.now();
+    if (now - this.lastActivityReportAt < SITE_ACTIVITY_REPORT_INTERVAL_MS) return;
+    this.lastActivityReportAt = now;
+    this.sendMessage({ type: 'siteActivity', at: now });
   }
 
   scheduleIdleStateSave() {
@@ -360,9 +381,12 @@ class HumanBrowser {
     }
   }
 
-  async armDailyAutoWait() {
-    const waitMs = this.getDailyAutoWaitMs();
+  async armDailyAutoWait(skipIdleWait = false) {
+    const waitMs = skipIdleWait ? 0 : this.getDailyAutoWaitMs();
     if (waitMs <= 0) {
+      if (skipIdleWait) {
+        this.sendMessage({ type: 'log', message: '后台静置条件已满足，开始执行每日任务' });
+      }
       await this.beginDailyAuto();
       return;
     }
@@ -1070,7 +1094,7 @@ class HumanBrowser {
   }
 
   // 开始浏览（不清空历史记录）
-  async startDaily(target, date) {
+  async startDaily(target, date, options = {}) {
     this.dailyAuto = await this.loadDailyAuto();
     if (!this.dailyAuto.enabled) {
       this.sendMessage({ type: 'log', message: '每日自动浏览已关闭' });
@@ -1083,7 +1107,7 @@ class HumanBrowser {
     this.dailyAuto.endTime = this.defaultDailyEndTime(this.dailyAuto.time);
     this.dailyAuto.running = true;
     await this.saveDailyAuto(this.dailyAuto);
-    await this.armDailyAutoWait();
+    await this.armDailyAutoWait(options.skipIdleWait === true);
   }
   async start() {
     console.log('[Linux DO Auto] 开始浏览，保留历史记录');
@@ -1269,7 +1293,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
 
     case 'startDaily':
-      safeReply(browser.startDaily(message.target, message.date), 'startDaily');
+      safeReply(browser.startDaily(message.target, message.date, { skipIdleWait: message.skipIdleWait }), 'startDaily');
       break;
 
     case 'getConfig':
@@ -1303,3 +1327,8 @@ window.addEventListener('beforeunload', () => {
     browser.saveState(browser.state);
   }
 });
+
+
+
+
+

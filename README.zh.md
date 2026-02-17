@@ -1,4 +1,4 @@
-# ldoSurfer - Linux DO 自动浏览工具
+﻿# ldoSurfer - Linux DO 自动浏览工具
 
 <div align="center">
 
@@ -7,7 +7,7 @@
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green?logo=google-chrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.2-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0.3-orange.svg)
 
 **模拟人类浏览行为，自动浏览 linux.do 帖子 | Chrome 浏览器自动化扩展**
 </div>
@@ -61,6 +61,7 @@ cd ldoSurfer
 | 点击概率 | 点击进入帖子的概率 | 0.6 |
 | 快速浏览模式 | 跳过评论，快速浏览帖子（停留5-10秒） | 关闭 |
 | 切换自动执行 | 切换为直接执行模式，跳过等待 10 分钟 | 关闭 |
+| 后台启动条件 | 仅在站点标签页后台且无操作 10 分钟后启动 | 关闭 |
 
 ## 使用指南
 
@@ -107,6 +108,7 @@ cd ldoSurfer
 **注意**
 - 必须开启开关，关闭即取消定时
 - 必须处于 linux.do 或 idcflare.com 页面才能执行
+- 开启「后台启动条件」时，需站点标签页后台且无操作 10 分钟才会启动（近似判断）
 
 ### 注意事项
 
@@ -130,4 +132,8 @@ cd ldoSurfer
 If you find this project helpful, consider giving it a star ⭐
 
 </div>
+
+
+
+
 

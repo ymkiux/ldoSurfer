@@ -1,4 +1,4 @@
-# ldoSurfer - Linux DO Auto Browse Tool
+﻿# ldoSurfer - Linux DO Auto Browse Tool
 
 <div align="center">
 
@@ -7,7 +7,7 @@
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green?logo=google-chrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.2-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0.3-orange.svg)
 
 **Simulate human browsing behavior, automatically browse linux.do posts | Chrome Browser Automation Extension**
 
@@ -62,6 +62,7 @@ cd ldoSurfer
 | Click Probability | Probability to click into posts | 0.6 |
 | Quick Browse Mode | Skip comments, fast browse (5-10s dwell) | Disabled |
 | Immediate Switch Execution | Skip the 10-minute wait and start directly | Disabled |
+| Background Start Condition | Start only when site tabs stay hidden and no activity for 10 minutes | Disabled |
 
 ## Usage Guide
 
@@ -108,6 +109,7 @@ Location: **Advanced Browse Settings**
 **Notes**
 - The toggle must be enabled; disabling it cancels the schedule
 - You must be on linux.do or idcflare.com for actions to work
+- If "Background Start Condition" is enabled, auto browse starts only after site tabs stay hidden and inactive for 10 minutes (best-effort)
 - Terminology: "Post" in the extension corresponds to a forum "Topic" (article); "Comment" in the extension corresponds to a forum "Post"
 
 ### Notes
@@ -131,3 +133,7 @@ Location: **Advanced Browse Settings**
 If you find this project helpful, consider giving it a star ⭐
 
 </div>
+
+
+
+
