@@ -199,29 +199,34 @@
       </div>
     </div>
 
-    <!-- 站名显示（主题按钮左侧） -->
-    <span id="currentSiteName" class="site-name">Linux DO</span>
+    <div class="corner-tools">
+      <!-- 版本号显示（右下角） -->
+      <button id="versionBadge" class="version-badge" type="button" aria-label="当前版本">v0.0.0</button>
 
-    <!-- 使用教程入口（主题按钮左侧） -->
-    <button id="openGuidePanel" class="guide-switcher theme-open" aria-haspopup="dialog" aria-controls="guidePanel" aria-label="查看使用教程">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M4 5.5c0-1.4 1.1-2.5 2.5-2.5H18c1.1 0 2 .9 2 2v13.5c0 .8-.7 1.5-1.5 1.5H7c-1.7 0-3 1.3-3 3V5.5Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        <path d="M7 4h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="M7 8h9M7 11.5h9M7 15h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
+      <!-- 站名显示（主题按钮左侧） -->
+      <span id="currentSiteName" class="site-name">Linux DO</span>
 
-    <!-- 主题切换入口（固定底部） -->
-    <button id="openThemePanel" class="theme-switcher theme-open" aria-haspopup="dialog" aria-controls="themePanel" aria-label="选择主题">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5" fill="none" />
-        <circle cx="9" cy="10" r="1.4" fill="currentColor" />
-        <circle cx="14.5" cy="9" r="1.2" fill="currentColor" />
-        <circle cx="16" cy="13" r="1.3" fill="currentColor" />
-        <circle cx="11" cy="15.5" r="1.2" fill="currentColor" />
-        <path d="M8 12.5c-.5 1.8.8 3.5 2.7 3.5h2.8c1 0 1.7-.9 1.4-1.9l-.4-1.6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
+      <!-- 使用教程入口（主题按钮左侧） -->
+      <button id="openGuidePanel" class="guide-switcher theme-open" aria-haspopup="dialog" aria-controls="guidePanel" aria-label="查看使用教程">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 5.5c0-1.4 1.1-2.5 2.5-2.5H18c1.1 0 2 .9 2 2v13.5c0 .8-.7 1.5-1.5 1.5H7c-1.7 0-3 1.3-3 3V5.5Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M7 4h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M7 8h9M7 11.5h9M7 15h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <!-- 主题切换入口（固定底部） -->
+      <button id="openThemePanel" class="theme-switcher theme-open" aria-haspopup="dialog" aria-controls="themePanel" aria-label="选择主题">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5" fill="none" />
+          <circle cx="9" cy="10" r="1.4" fill="currentColor" />
+          <circle cx="14.5" cy="9" r="1.2" fill="currentColor" />
+          <circle cx="16" cy="13" r="1.3" fill="currentColor" />
+          <circle cx="11" cy="15.5" r="1.2" fill="currentColor" />
+          <path d="M8 12.5c-.5 1.8.8 3.5 2.7 3.5h2.8c1 0 1.7-.9 1.4-1.9l-.4-1.6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- 主题弹窗 -->
@@ -262,15 +267,26 @@
         <button class="theme-modal__close" id="closeGuidePanel" aria-label="关闭使用教程">✕</button>
       </div>
       <div class="guide-content">
-        <ol class="guide-list">
-          <li>确认已登录 Linux DO 或 IDCFlare</li>
-          <li>设置浏览参数后点击「开始浏览」</li>
-          <li>需要定时：开启「每日自动浏览」，设置开始时间，系统会自动持续 10 小时</li>
-          <li>切换到 tab 后，默认等待 10 分钟无操作才开始，可在高级浏览设置中开启「切换直接执行」免等待</li>
-          <li>任何时候点击「停止」即可终止</li>
-          <li>插件里的「帖子」对应论坛里的「话题」（文章）</li>
-          <li>插件里的「评论」对应论坛里的「帖子」</li>
-        </ol>
+        <div class="guide-section">
+          <div class="guide-section-title">基础使用</div>
+          <ol class="guide-list">
+            <li>确认已登录 Linux DO 或 IDCFlare</li>
+            <li>设置浏览参数后点击「开始浏览」</li>
+            <li>需要定时：开启「每日自动浏览」，设置开始时间，系统会自动持续 10 小时</li>
+            <li>切换到 tab 后，默认等待 10 分钟无操作才开始，可在高级浏览设置中开启「切换直接执行」免等待</li>
+            <li>任何时候点击「停止」即可终止</li>
+            <li>插件里的「帖子」对应论坛里的「话题」（文章）</li>
+            <li>插件里的「评论」对应论坛里的「帖子」</li>
+          </ol>
+        </div>
+        <div class="guide-section">
+          <div class="guide-section-title">版本号与开发者模式</div>
+          <ol class="guide-list">
+            <li>右下角显示当前版本号</li>
+            <li>短时间连续点击版本号 3 次可开启开发者模式，显示「内部日志」</li>
+            <li>开发者模式仅在当前浏览器会话有效，关闭浏览器后失效</li>
+          </ol>
+        </div>
       </div>
     </div>
   </div>
@@ -279,6 +295,9 @@
   <script src="popup.js"></script>
 </body>
 </html>
+
+
+
 
 
 

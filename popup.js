@@ -19,6 +19,8 @@ const DEFAULT_DAILY_AUTO = {
 const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_UI_KEY = 'linuxDoDebugUi';
 const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
+const DEBUG_UNLOCK_CLICK_COUNT = 3;
+const DEBUG_UNLOCK_CLICK_GAP = 600;
 
 function safeStorageGet(keys) {
   return new Promise((resolve) => {
@@ -59,6 +61,52 @@ function safeStorageSet(payload) {
       });
     } catch (error) {
       console.warn('[Popup] storage.set threw', error);
+      resolve();
+    }
+  });
+}
+
+function safeSessionGet(keys) {
+  return new Promise((resolve) => {
+    const sessionStorage = chrome?.storage?.session;
+    if (!sessionStorage) {
+      resolve({});
+      return;
+    }
+    try {
+      sessionStorage.get(keys, (result) => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Popup] storage.session.get failed', lastError.message);
+          resolve({});
+          return;
+        }
+        resolve(result || {});
+      });
+    } catch (error) {
+      console.warn('[Popup] storage.session.get threw', error);
+      resolve({});
+    }
+  });
+}
+
+function safeSessionSet(payload) {
+  return new Promise((resolve) => {
+    const sessionStorage = chrome?.storage?.session;
+    if (!sessionStorage) {
+      resolve();
+      return;
+    }
+    try {
+      sessionStorage.set(payload, () => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Popup] storage.session.set failed', lastError.message);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn('[Popup] storage.session.set threw', error);
       resolve();
     }
   });
@@ -306,6 +354,10 @@ class PopupController {
     this.guidePanelEl = null;
     this.guideOpenEl = null;
     this.guideCloseEl = null;
+    this.versionBadgeEl = null;
+    this.debugClickCount = 0;
+    this.debugClickLastAt = 0;
+    this.debugUiEnabled = false;
     this.config = {
       minScrollDelay: 800,
       maxScrollDelay: 3000,
@@ -333,6 +385,7 @@ class PopupController {
     this.themeManager.init();
     this.siteManager.init();
     this.initGuidePanel();
+    this.initVersionBadge();
     this.bindEvents();
     this.initInternalLogTools();
     this.initDailyAutoToggle();
@@ -373,12 +426,64 @@ class PopupController {
     }
   }
 
+  initVersionBadge() {
+    this.versionBadgeEl = document.getElementById('versionBadge');
+    if (!this.versionBadgeEl) return;
+    const manifest = chrome?.runtime?.getManifest?.();
+    const versionText = manifest?.version ? `v${manifest.version}` : 'v0.0.0';
+    this.versionBadgeEl.textContent = versionText;
+    if (manifest?.version) {
+      this.versionBadgeEl.setAttribute('title', `版本 ${manifest.version}`);
+    }
+    this.versionBadgeEl.addEventListener('click', () => this.handleDebugUnlockClick());
+    this.versionBadgeEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.handleDebugUnlockClick();
+      }
+    });
+  }
+
+  handleDebugUnlockClick() {
+    if (this.debugUiEnabled) return;
+    const now = Date.now();
+    if (now - this.debugClickLastAt > DEBUG_UNLOCK_CLICK_GAP) {
+      this.debugClickCount = 0;
+    }
+    this.debugClickLastAt = now;
+    this.debugClickCount += 1;
+    if (this.debugClickCount >= DEBUG_UNLOCK_CLICK_COUNT) {
+      this.debugClickCount = 0;
+      this.enableDebugUi(true);
+    }
+  }
+
+  enableDebugUi(persist = true) {
+    if (this.debugUiEnabled) return;
+    this.debugUiEnabled = true;
+    const toolsEl = document.getElementById('internalLogTools');
+    if (toolsEl) {
+      toolsEl.removeAttribute('hidden');
+    }
+    if (this.versionBadgeEl) {
+      this.versionBadgeEl.classList.add('version-badge--active');
+    }
+    if (persist) {
+      safeSessionSet({ [INTERNAL_LOG_UI_KEY]: true });
+    }
+  }
+
   initInternalLogTools() {
     const toolsEl = document.getElementById('internalLogTools');
     if (!toolsEl) return;
+    safeSessionGet([INTERNAL_LOG_UI_KEY]).then((result) => {
+      if (result[INTERNAL_LOG_UI_KEY]) {
+        this.enableDebugUi(false);
+      }
+    });
     safeStorageGet([INTERNAL_LOG_UI_KEY]).then((result) => {
       if (result[INTERNAL_LOG_UI_KEY]) {
-        toolsEl.removeAttribute('hidden');
+        safeStorageSet({ [INTERNAL_LOG_UI_KEY]: false });
       }
     });
   }
@@ -1386,6 +1491,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
+
+
+
 
 
 
