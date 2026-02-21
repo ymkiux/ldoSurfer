@@ -39,7 +39,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["statsRecorderModule.js"],
+      "resources": ["statsRecorderModule.js", "icons/logo.png"],
       "matches": ["https://linux.do/*", "https://idcflare.com/*"]
     }
   ]

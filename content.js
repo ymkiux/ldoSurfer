@@ -1222,6 +1222,7 @@ class HumanBrowser {
   }
 
   sendMessage(message) {
+    handleLocalStatusMessage(this, message);
     if (!chrome?.runtime?.id) {
       this.recordInternalError('runtime_unavailable', 'runtime.id missing');
       return;
@@ -1245,6 +1246,168 @@ class HumanBrowser {
   }
 }
 
+const LOGO_BADGE_ID = 'ldo-logo-badge';
+const LOGO_BADGE_LOG_ID = 'ldo-logo-badge-log';
+const LOGO_BADGE_MARGIN = 16;
+const LOGO_BADGE_SIZE = 96;
+
+const logoBadgeState = {
+  badge: null,
+  logEl: null,
+  running: false
+};
+
+const ensureLogoBadge = () => {
+  if (window.top !== window) return;
+  if (logoBadgeState.badge) return;
+  if (!chrome?.runtime?.id) return;
+
+  const mount = document.body || document.documentElement;
+  if (!mount) return;
+
+  const badge = document.createElement('div');
+  badge.id = LOGO_BADGE_ID;
+  badge.style.position = 'absolute';
+  badge.style.zIndex = '2147483647';
+  badge.style.width = `${LOGO_BADGE_SIZE}px`;
+  badge.style.height = 'auto';
+  badge.style.pointerEvents = 'none';
+  badge.style.userSelect = 'none';
+  badge.style.opacity = '0.9';
+  badge.style.left = '0px';
+  badge.style.top = '0px';
+
+  const img = document.createElement('img');
+  img.src = chrome.runtime.getURL('icons/logo.png');
+  img.alt = 'Linux DO Logo';
+  img.decoding = 'async';
+  img.loading = 'lazy';
+  img.style.width = '100%';
+  img.style.height = 'auto';
+  img.style.display = 'block';
+
+  const log = document.createElement('div');
+  log.id = LOGO_BADGE_LOG_ID;
+  log.style.position = 'absolute';
+  log.style.left = '6px';
+  log.style.right = '6px';
+  log.style.bottom = '6px';
+  log.style.padding = '4px 6px';
+  log.style.borderRadius = '8px';
+  log.style.background = 'linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.75))';
+  log.style.color = '#f8f8f8';
+  log.style.fontSize = '10px';
+  log.style.lineHeight = '1.3';
+  log.style.textAlign = 'center';
+  log.style.textShadow = '0 1px 2px rgba(0,0,0,0.6)';
+  log.style.opacity = '0';
+  log.style.transition = 'opacity 160ms ease';
+  log.style.pointerEvents = 'none';
+  log.style.display = '-webkit-box';
+  log.style.WebkitLineClamp = '2';
+  log.style.WebkitBoxOrient = 'vertical';
+  log.style.overflow = 'hidden';
+
+  badge.appendChild(img);
+  badge.appendChild(log);
+  mount.appendChild(badge);
+
+  logoBadgeState.badge = badge;
+  logoBadgeState.logEl = log;
+
+  let rafId = null;
+  const updatePosition = () => {
+    rafId = null;
+    const rect = badge.getBoundingClientRect();
+    const width = rect.width || LOGO_BADGE_SIZE;
+    const height = rect.height || LOGO_BADGE_SIZE;
+    const left = window.scrollX + window.innerWidth - width - LOGO_BADGE_MARGIN;
+    const top = window.scrollY + window.innerHeight - height - LOGO_BADGE_MARGIN;
+    badge.style.left = `${Math.max(window.scrollX + LOGO_BADGE_MARGIN, left)}px`;
+    badge.style.top = `${Math.max(window.scrollY + LOGO_BADGE_MARGIN, top)}px`;
+  };
+
+  const requestUpdate = () => {
+    if (rafId !== null) return;
+    rafId = window.requestAnimationFrame(updatePosition);
+  };
+
+  window.addEventListener('scroll', requestUpdate, { passive: true });
+  window.addEventListener('resize', requestUpdate);
+  img.addEventListener('load', requestUpdate, { once: true });
+  requestUpdate();
+};
+
+const getLogoLogColor = (type) => {
+  switch (type) {
+    case 'success':
+      return '#b7f7d9';
+    case 'warning':
+      return '#ffe1a6';
+    case 'error':
+      return '#ffb1b1';
+    default:
+      return '#f8f8f8';
+  }
+};
+
+const setLogoBadgeRunning = (running) => {
+  logoBadgeState.running = running;
+  if (!logoBadgeState.logEl) return;
+  logoBadgeState.logEl.style.opacity = running ? '1' : '0';
+  if (!running) {
+    logoBadgeState.logEl.textContent = '';
+  }
+};
+
+const setLogoBadgeLog = (message, type = 'info') => {
+  if (!message) return;
+  ensureLogoBadge();
+  if (!logoBadgeState.logEl) return;
+  logoBadgeState.logEl.textContent = message;
+  logoBadgeState.logEl.style.color = getLogoLogColor(type);
+  if (logoBadgeState.running) {
+    logoBadgeState.logEl.style.opacity = '1';
+  }
+};
+
+function handleLocalStatusMessage(context, message) {
+  if (!message || typeof message !== 'object') return;
+  if (window.top !== window) return;
+
+  const isRunning =
+    !!context?.state?.isRunning ||
+    (typeof context?.isDailyAutoRunning === 'function' && context.isDailyAutoRunning());
+
+  ensureLogoBadge();
+  setLogoBadgeRunning(isRunning);
+
+  if (message.type === 'log') {
+    if (isRunning) {
+      setLogoBadgeLog(message.message, 'info');
+    }
+    return;
+  }
+  if (message.type === 'error') {
+    if (isRunning) {
+      setLogoBadgeLog(message.message, 'error');
+    }
+    return;
+  }
+  if (message.type === 'started') {
+    setLogoBadgeRunning(true);
+    setLogoBadgeLog('自动浏览已启动', 'success');
+    return;
+  }
+  if (message.type === 'stopped') {
+    setLogoBadgeRunning(false);
+    return;
+  }
+  if (message.type === 'ready' && isRunning && logoBadgeState.logEl && !logoBadgeState.logEl.textContent) {
+    setLogoBadgeLog('自动浏览中', 'info');
+  }
+}
+
 // 创建实例
 let browser = null;
 
@@ -1252,9 +1415,11 @@ let browser = null;
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     browser = new HumanBrowser();
+    ensureLogoBadge();
   });
 } else {
   browser = new HumanBrowser();
+  ensureLogoBadge();
 }
 
 // 监听来自 popup 的消息

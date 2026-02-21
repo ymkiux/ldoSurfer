@@ -411,6 +411,13 @@ class PopupController {
         safeTabsCreate({ url: this.siteManager.getLatestUrl() });
       });
     }
+    const latestInvites = document.getElementById('openLatestInvites');
+    if (latestInvites) {
+      latestInvites.addEventListener('click', (e) => {
+        e.preventDefault();
+        safeTabsCreate({ url: this.siteManager.getLatestUrl() });
+      });
+    }
 
     // [交互增强] 监听设置面板展开事件，自动滚动到底部
     const settingsPanel = document.getElementById('settingsPanel');
