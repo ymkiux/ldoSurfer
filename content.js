@@ -1267,15 +1267,17 @@ const ensureLogoBadge = () => {
 
   const badge = document.createElement('div');
   badge.id = LOGO_BADGE_ID;
-  badge.style.position = 'absolute';
+  badge.style.position = 'fixed';
   badge.style.zIndex = '2147483647';
   badge.style.width = `${LOGO_BADGE_SIZE}px`;
   badge.style.height = 'auto';
   badge.style.pointerEvents = 'none';
   badge.style.userSelect = 'none';
   badge.style.opacity = '0.9';
-  badge.style.left = '0px';
-  badge.style.top = '0px';
+  badge.style.right = `${LOGO_BADGE_MARGIN}px`;
+  badge.style.bottom = `${LOGO_BADGE_MARGIN}px`;
+  badge.style.left = 'auto';
+  badge.style.top = 'auto';
 
   const img = document.createElement('img');
   img.src = chrome.runtime.getURL('icons/logo.png');
@@ -1315,27 +1317,6 @@ const ensureLogoBadge = () => {
   logoBadgeState.badge = badge;
   logoBadgeState.logEl = log;
 
-  let rafId = null;
-  const updatePosition = () => {
-    rafId = null;
-    const rect = badge.getBoundingClientRect();
-    const width = rect.width || LOGO_BADGE_SIZE;
-    const height = rect.height || LOGO_BADGE_SIZE;
-    const left = window.scrollX + window.innerWidth - width - LOGO_BADGE_MARGIN;
-    const top = window.scrollY + window.innerHeight - height - LOGO_BADGE_MARGIN;
-    badge.style.left = `${Math.max(window.scrollX + LOGO_BADGE_MARGIN, left)}px`;
-    badge.style.top = `${Math.max(window.scrollY + LOGO_BADGE_MARGIN, top)}px`;
-  };
-
-  const requestUpdate = () => {
-    if (rafId !== null) return;
-    rafId = window.requestAnimationFrame(updatePosition);
-  };
-
-  window.addEventListener('scroll', requestUpdate, { passive: true });
-  window.addEventListener('resize', requestUpdate);
-  img.addEventListener('load', requestUpdate, { once: true });
-  requestUpdate();
 };
 
 const getLogoLogColor = (type) => {
