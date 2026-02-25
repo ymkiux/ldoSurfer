@@ -390,6 +390,7 @@ class PopupController {
     this.initInternalLogTools();
     this.initDailyAutoToggle();
     this.loadSettings();
+    this.loadLevelSummary();
     this.startTimer();
     this.checkStatus().then(() => {
       this.updateStatus();
@@ -461,9 +462,16 @@ class PopupController {
   enableDebugUi(persist = true) {
     if (this.debugUiEnabled) return;
     this.debugUiEnabled = true;
+    if (document.body) {
+      document.body.classList.add('debug-ui-enabled');
+    }
     const toolsEl = document.getElementById('internalLogTools');
     if (toolsEl) {
       toolsEl.removeAttribute('hidden');
+    }
+    const logsSectionEl = document.getElementById('logsSection');
+    if (logsSectionEl) {
+      logsSectionEl.removeAttribute('hidden');
     }
     if (this.versionBadgeEl) {
       this.versionBadgeEl.classList.add('version-badge--active');
@@ -505,10 +513,13 @@ class PopupController {
       clearInternalLogs.addEventListener('click', () => this.clearInternalLogs());
     }
     
-    document.getElementById('openLatest').addEventListener('click', (e) => {
-      e.preventDefault();
-      safeTabsCreate({ url: this.siteManager.getLatestUrl() });
-    });
+    const openLatest = document.getElementById('openLatest');
+    if (openLatest) {
+      openLatest.addEventListener('click', (e) => {
+        e.preventDefault();
+        safeTabsCreate({ url: this.siteManager.getLatestUrl() });
+      });
+    }
     const latestStats = document.getElementById('openLatestStats');
     if (latestStats) {
       latestStats.addEventListener('click', (e) => {
@@ -722,7 +733,108 @@ class PopupController {
   }
 
   updateStats() {
-    document.getElementById('browsedCount').textContent = this.stats.totalBrowsed;
+    const totalBrowsed = Number(this.stats.totalBrowsed) || 0;
+    const errors = Number(this.stats.errors) || 0;
+    const browsedEl = document.getElementById('browsedCount');
+    if (browsedEl) {
+      browsedEl.textContent = totalBrowsed;
+    }
+  }
+
+  async loadLevelSummary() {
+    const titleEl = document.getElementById('levelTitle');
+    const metaEl = document.getElementById('levelMeta');
+    const badgeEl = document.getElementById('levelBadge');
+    const visitEl = document.getElementById('levelVisitDays');
+    const topicsEl = document.getElementById('levelTopics');
+    const postsEl = document.getElementById('levelPosts');
+    if (!titleEl || !metaEl || !badgeEl) return;
+
+    try {
+      metaEl.textContent = '正在获取 Connect 数据…';
+      const response = await fetch('https://connect.linux.do/', { credentials: 'include' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+
+      const cardTitle = doc.querySelector('.page-content .card .card-title') || doc.querySelector('.card .card-title');
+      const cardSubtitle = doc.querySelector('.page-content .card .card-subtitle') || doc.querySelector('.card .card-subtitle');
+      const cardBadge = doc.querySelector('.page-content .card .badge') || doc.querySelector('.card .badge');
+
+      if (!cardTitle) throw new Error('no data');
+      const rawTitle = cardTitle.textContent.replace('的要求', '').trim();
+      const titleMatch = rawTitle.match(/(信任级别)\s*(\d+)/);
+      if (titleMatch) {
+        titleEl.innerHTML = `<span class="level-title-label">${titleMatch[1]}</span><span class="level-title-value">${titleMatch[2]}</span>`;
+      } else {
+        titleEl.textContent = rawTitle;
+      }
+      metaEl.textContent = cardSubtitle ? cardSubtitle.textContent.trim() : '数据来自 Connect';
+
+      const badgeText = cardBadge ? cardBadge.textContent.trim() : '—';
+      badgeEl.textContent = badgeText;
+      badgeEl.className = 'badge';
+      if (/已达|已达到/.test(badgeText)) {
+        badgeEl.classList.add('badge-success');
+      } else if (/未达|未达到/.test(badgeText)) {
+        badgeEl.classList.add('badge-warning');
+      }
+
+      const mapping = [
+        ['访问天数', visitEl],
+        ['浏览话题', topicsEl],
+        ['浏览帖子', postsEl]
+      ];
+
+      const setMetricValue = (outputEl, value) => {
+        if (!outputEl) return;
+        const metricEl = outputEl.closest('.level-metric');
+        const match = String(value).match(/([\d.]+)\s*\/\s*([\d.]+)/);
+        if (match) {
+          const current = Number(match[1]);
+          const target = Number(match[2]);
+          outputEl.innerHTML = `<span class="level-metric__current">${match[1]}</span><span class="level-metric__target">/${match[2]}</span>`;
+          if (metricEl && target > 0) {
+            const progress = Math.min(1, current / target);
+            metricEl.style.setProperty('--progress', progress.toFixed(3));
+            metricEl.classList.toggle('is-met', current >= target);
+          }
+        } else {
+          outputEl.textContent = value;
+        }
+      };
+
+      doc.querySelectorAll('.tl3-ring').forEach((ring) => {
+        const labelEl = ring.querySelector('.tl3-ring-label');
+        const currentEl = ring.querySelector('.tl3-ring-current');
+        const targetEl = ring.querySelector('.tl3-ring-target');
+        if (!labelEl || !currentEl || !targetEl) return;
+        const label = labelEl.textContent.trim();
+        const entry = mapping.find(([name]) => name === label);
+        if (!entry) return;
+        const outputEl = entry[1];
+        const current = currentEl.textContent.trim();
+        const target = targetEl.textContent.replace('/', '').trim();
+        setMetricValue(outputEl, `${current}/${target}`);
+      });
+    } catch (error) {
+      titleEl.textContent = '信任级别 —';
+      metaEl.textContent = '未登录或无法读取数据';
+      badgeEl.textContent = '未获取';
+      badgeEl.className = 'badge badge-warning';
+      const resetMetric = (el) => {
+        if (!el) return;
+        el.textContent = '—';
+        const metricEl = el.closest('.level-metric');
+        if (metricEl) {
+          metricEl.style.setProperty('--progress', '0');
+          metricEl.classList.remove('is-met');
+        }
+      };
+      resetMetric(visitEl);
+      resetMetric(topicsEl);
+      resetMetric(postsEl);
+    }
   }
 
   startTimer() {
@@ -1484,13 +1596,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         controller.updateStats();
         break;
       case 'log': controller.log(message.message, 'info'); break;
-      case 'error': controller.log(message.message, 'error'); controller.stats.errors++; break;
+      case 'error':
+        controller.log(message.message, 'error');
+        controller.stats.errors++;
+        controller.updateStats();
+        break;
       case 'configUpdated': controller.log('配置已更新', 'info'); break;
     }
   }
 
   return true;
 });
+
+
 
 
 

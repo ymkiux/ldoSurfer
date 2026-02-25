@@ -67,29 +67,43 @@
                 <input type="number" id="clickProbability" value="0.6" step="0.1">
               </div>
             </div>
-            <div class="setting-item">
-              <label class="switch-label" style="padding:0">
-                <input type="checkbox" id="quickMode" class="switch-checkbox">
-                <span class="switch-text">快速模式 (跳过评论)</span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <label class="switch-label" style="padding:0">
-                <input type="checkbox" id="useIdcflareSite" class="switch-checkbox">
-                <span class="switch-text">切换到 IDCFlare</span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <label class="switch-label" style="padding:0">
-                <input type="checkbox" id="dailyAutoEnabled" class="switch-checkbox">
-                <span class="switch-text">每日自动浏览 (默认 09:00，持续 10 小时)</span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <label class="switch-label" style="padding:0">
-                <input type="checkbox" id="skipDailyIdleWait" class="switch-checkbox">
-                <span class="switch-text">切换直接执行（默认等待 10 分钟）</span>
-              </label>
+            <div class="setting-switch-grid">
+              <div class="setting-item setting-item--switch">
+                <label class="switch-label" style="padding:0">
+                  <input type="checkbox" id="quickMode" class="switch-checkbox">
+                  <span class="switch-text">
+                    <span class="switch-title">快速模式</span>
+                    <span class="switch-sub">跳过评论</span>
+                  </span>
+                </label>
+              </div>
+              <div class="setting-item setting-item--switch">
+                <label class="switch-label" style="padding:0">
+                  <input type="checkbox" id="useIdcflareSite" class="switch-checkbox">
+                  <span class="switch-text">
+                    <span class="switch-title">切换站点</span>
+                    <span class="switch-sub">IDCFlare</span>
+                  </span>
+                </label>
+              </div>
+              <div class="setting-item setting-item--switch">
+                <label class="switch-label" style="padding:0">
+                  <input type="checkbox" id="dailyAutoEnabled" class="switch-checkbox">
+                  <span class="switch-text">
+                    <span class="switch-title">每日自动</span>
+                    <span class="switch-sub">09:00 / 10h</span>
+                  </span>
+                </label>
+              </div>
+              <div class="setting-item setting-item--switch">
+                <label class="switch-label" style="padding:0">
+                  <input type="checkbox" id="skipDailyIdleWait" class="switch-checkbox">
+                  <span class="switch-text">
+                    <span class="switch-title">切换直达</span>
+                    <span class="switch-sub">等待 10m</span>
+                  </span>
+                </label>
+              </div>
             </div>
             <div class="setting-item">
               <label>每日开始时间</label>
@@ -101,8 +115,36 @@
           </div>
         </details>
 
+        <div class="level-banner" id="levelBanner">
+          <div class="level-banner__head">
+            <div>
+              <div class="level-banner__hint">当前等级</div>
+              <div class="level-banner__title" id="levelTitle">信任级别 —</div>
+              <div class="level-banner__meta" id="levelMeta">正在读取 Connect 数据…</div>
+            </div>
+            <span class="badge" id="levelBadge">加载中</span>
+          </div>
+          <div class="level-banner__metrics">
+            <div class="level-metric">
+              <span class="level-metric__label">访问天数</span>
+              <span class="level-metric__value" id="levelVisitDays">—</span>
+              <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
+            </div>
+            <div class="level-metric">
+              <span class="level-metric__label">浏览话题</span>
+              <span class="level-metric__value" id="levelTopics">—</span>
+              <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
+            </div>
+            <div class="level-metric">
+              <span class="level-metric__label">浏览帖子</span>
+              <span class="level-metric__value" id="levelPosts">—</span>
+              <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
+            </div>
+          </div>
+        </div>
+
         <!-- 日志区域 -->
-        <div class="logs-section">
+        <div id="logsSection" class="logs-section" hidden>
           <div class="logs-header">
             <span>运行日志</span>
             <div style="display:flex;gap:4px;">
@@ -133,13 +175,6 @@
         </div>
       </div>
 
-      <!-- 底部栏 -->
-      <div class="footer-bar">
-        <div style="display:flex;gap:12px;">
-          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
-          <a href="#" id="openLatest" class="footer-link">最新</a>
-        </div>
-      </div>
     </div>
 
     <!-- 统计面板 -->
@@ -150,13 +185,6 @@
         </div>
       </div>
 
-      <!-- 底部栏 (统计页) -->
-      <div class="footer-bar">
-        <div style="display:flex;gap:12px;">
-          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
-          <a href="#" id="openLatestStats" class="footer-link">最新</a>
-        </div>
-      </div>
     </div>
 
     <!-- 邀请榜单面板 -->
@@ -189,12 +217,6 @@
         </div>
         <div class="invites-body" id="invitesBody">
           <div class="invites-loading">加载中...</div>
-        </div>
-      </div>
-      <div class="footer-bar">
-        <div style="display:flex;gap:12px;">
-          <a href="https://linux.do" target="_blank" class="footer-link">主页</a>
-          <a href="#" id="openLatestInvites" class="footer-link">最新</a>
         </div>
       </div>
     </div>
@@ -283,7 +305,7 @@
           <div class="guide-section-title">版本号与开发者模式</div>
           <ol class="guide-list">
             <li>右下角显示当前版本号</li>
-            <li>短时间连续点击版本号 3 次可开启开发者模式，显示「内部日志」</li>
+            <li>短时间连续点击版本号 3 次可开启开发者模式，显示「运行日志」与「内部日志」</li>
             <li>开发者模式仅在当前浏览器会话有效，关闭浏览器后失效</li>
           </ol>
         </div>
@@ -295,6 +317,8 @@
   <script src="popup.js"></script>
 </body>
 </html>
+
+
 
 
 

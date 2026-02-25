@@ -861,12 +861,230 @@ body.invites-scrolling .corner-tools {
   margin-bottom: 12px;
 }
 
+.setting-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.setting-item--switch {
+  margin-bottom: 0;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.setting-item--switch .switch-label {
+  width: 100%;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.setting-switch-grid .switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.setting-switch-grid .switch-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.setting-switch-grid .switch-sub {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
 .setting-item label {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
   cursor: default;
   user-select: none;
+}
+
+/* ---------------- 组件：等级概览 ---------------- */
+.level-banner {
+  background: var(--bg-card);
+  border-radius: var(--radius-l);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-divider);
+  position: relative;
+  overflow: hidden;
+}
+
+.level-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(180px 90px at -10% -20%,
+      color-mix(in srgb, var(--accent) 22%, transparent),
+      transparent 60%),
+    radial-gradient(160px 80px at 110% 110%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 60%);
+  pointer-events: none;
+}
+
+.level-banner__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+  margin-bottom: 10px;
+}
+
+.level-banner__hint {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.level-banner__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.level-banner__meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.level-title-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.level-title-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.level-banner__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.level-metric {
+  background: var(--bg-input);
+  border-radius: var(--radius-m);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.level-metric__label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.level-metric__value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.level-metric__current {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.level-metric__target {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.level-metric__bar {
+  margin-top: 4px;
+  height: 4px;
+  width: 100%;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-input));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.level-metric__bar-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--progress, 0) * 100%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 75%, var(--bg-card)),
+    var(--accent)
+  );
+  border-radius: inherit;
+  transition: width 0.4s ease;
+  opacity: 0.75;
+}
+
+.level-metric.is-met .level-metric__bar-fill {
+  opacity: 1;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 65%, var(--bg-card)),
+    var(--accent)
+  );
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--color-divider);
+}
+
+.badge-success {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.badge-warning {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+@media (max-width: 360px) {
+  .level-banner__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .input-group { 
@@ -970,6 +1188,10 @@ body.invites-scrolling .corner-tools {
   flex-direction: column;
   height: 120px; /* 固定高度，内部滚动 */
   overflow: hidden;
+}
+
+body:not(.debug-ui-enabled) .logs-section {
+  display: none;
 }
 
 .logs-header {
@@ -1546,6 +1768,7 @@ body.invites-scrolling .corner-tools {
     align-items: flex-start;
   }
 }
+
 
 
 

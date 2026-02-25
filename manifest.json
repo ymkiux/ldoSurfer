@@ -1,7 +1,7 @@
 ﻿{
   "manifest_version": 3,
   "name": "ldoSurfer - Linux DO 自动浏览工具",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Linux DO 社区自动浏览扩展 | 模拟人类浏览行为、平滑滚动、随机停留 | Chrome Extension Manifest V3",
   "permissions": [
     "activeTab",
@@ -44,6 +44,7 @@
     }
   ]
 }
+
 
 
 
