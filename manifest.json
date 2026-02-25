@@ -12,7 +12,8 @@
   "host_permissions": [
     "https://linux.do/*",
     "https://idcflare.com/*",
-    "https://connect.linux.do/*"
+    "https://connect.linux.do/*",
+    "https://connect.idcflare.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -34,6 +35,11 @@
     {
       "matches": ["https://linux.do/*", "https://idcflare.com/*"],
       "js": ["statsRecorderModule.js", "content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://connect.linux.do/*", "https://connect.idcflare.com/*"],
+      "js": ["connectContent.js"],
       "run_at": "document_idle"
     }
   ],

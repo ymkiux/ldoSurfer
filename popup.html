@@ -6,7 +6,7 @@
   <title>Linux DO 自动浏览</title>
   <link rel="stylesheet" href="popup.css">
 </head>
-<body>
+<body data-site="linuxdo">
   <div class="container">
     <!-- Tab 导航 -->
     <div class="tab-nav" role="tablist">
@@ -39,8 +39,74 @@
         <button id="clearHistoryBtn" class="btn-text">清空历史</button>
       </div>
 
+        <div class="level-banner" id="levelBanner">
+          <div class="level-banner__head">
+            <div>
+              <div class="level-banner__hint">当前等级</div>
+              <div class="level-banner__title" id="levelTitle">信任级别 —</div>
+              <div class="level-banner__meta" id="levelMeta">正在读取 Connect 数据…</div>
+            </div>
+            <div class="level-banner__actions">
+              <span class="badge" id="levelBadge">加载中</span>
+              <button id="levelLoginBtn" class="level-login-btn" type="button" hidden>去登录</button>
+            </div>
+          </div>
+        <div class="level-banner__hero">
+          <div class="level-hero">
+            <div class="level-hero__label">等级</div>
+            <div class="level-hero__value" id="levelHeroValue">—</div>
+          </div>
+          <div class="level-hero__divider"></div>
+          <div class="level-hero__meta">
+            <div class="level-hero__name" id="levelHeroName">信任级别</div>
+            <div class="level-hero__desc" id="levelHeroDesc">—</div>
+          </div>
+        </div>
+        <div class="level-banner__metrics">
+          <div class="level-metric">
+            <span class="level-metric__label">访问天数</span>
+            <span class="level-metric__value" id="levelVisitDays">—</span>
+            <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
+          </div>
+          <div class="level-metric">
+            <span class="level-metric__label">浏览话题</span>
+            <span class="level-metric__value" id="levelTopics">—</span>
+            <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
+          </div>
+          <div class="level-metric">
+            <span class="level-metric__label">浏览帖子</span>
+            <span class="level-metric__value" id="levelPosts">—</span>
+            <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
+          </div>
+        </div>
+      </div>
+
       <!-- 滚动容器 (所有可变高度内容放这里) -->
       <div class="scroll-container">
+        <div class="site-switcher">
+          <div class="site-switcher__header">
+            <div>
+              <div class="site-switcher__title">站点</div>
+              <div class="site-switcher__subtitle">点击切换目标站点</div>
+            </div>
+            <div class="site-switcher__current">当前：<span id="currentSiteNameInline">Linux DO</span></div>
+          </div>
+          <div class="site-switcher__grid" role="radiogroup" aria-label="站点选择">
+            <button class="site-chip is-active" type="button" role="radio" aria-checked="true" data-site-id="linuxdo">
+              <span class="site-chip__title">Linux DO</span>
+              <span class="site-chip__tag">主站</span>
+            </button>
+            <button class="site-chip" type="button" role="radio" aria-checked="false" data-site-id="idcflare">
+              <span class="site-chip__title">IDCFlare</span>
+              <span class="site-chip__tag">镜像</span>
+            </button>
+            <button class="site-chip is-disabled" type="button" role="radio" aria-checked="false" data-site-id="connect" disabled>
+              <span class="site-chip__title">Nodeseek</span>
+              <span class="site-chip__tag">即将支持</span>
+            </button>
+          </div>
+        </div>
+
         <!-- 设置面板 -->
         <details class="settings settings-container" id="settingsPanel">
           <summary>高级浏览设置</summary>
@@ -79,15 +145,6 @@
               </div>
               <div class="setting-item setting-item--switch">
                 <label class="switch-label" style="padding:0">
-                  <input type="checkbox" id="useIdcflareSite" class="switch-checkbox">
-                  <span class="switch-text">
-                    <span class="switch-title">切换站点</span>
-                    <span class="switch-sub">IDCFlare</span>
-                  </span>
-                </label>
-              </div>
-              <div class="setting-item setting-item--switch">
-                <label class="switch-label" style="padding:0">
                   <input type="checkbox" id="dailyAutoEnabled" class="switch-checkbox">
                   <span class="switch-text">
                     <span class="switch-title">每日自动</span>
@@ -114,34 +171,6 @@
             <button id="applySettings" class="btn-apply">应用并保存</button>
           </div>
         </details>
-
-        <div class="level-banner" id="levelBanner">
-          <div class="level-banner__head">
-            <div>
-              <div class="level-banner__hint">当前等级</div>
-              <div class="level-banner__title" id="levelTitle">信任级别 —</div>
-              <div class="level-banner__meta" id="levelMeta">正在读取 Connect 数据…</div>
-            </div>
-            <span class="badge" id="levelBadge">加载中</span>
-          </div>
-          <div class="level-banner__metrics">
-            <div class="level-metric">
-              <span class="level-metric__label">访问天数</span>
-              <span class="level-metric__value" id="levelVisitDays">—</span>
-              <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
-            </div>
-            <div class="level-metric">
-              <span class="level-metric__label">浏览话题</span>
-              <span class="level-metric__value" id="levelTopics">—</span>
-              <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
-            </div>
-            <div class="level-metric">
-              <span class="level-metric__label">浏览帖子</span>
-              <span class="level-metric__value" id="levelPosts">—</span>
-              <div class="level-metric__bar"><span class="level-metric__bar-fill"></span></div>
-            </div>
-          </div>
-        </div>
 
         <!-- 日志区域 -->
         <div id="logsSection" class="logs-section" hidden>

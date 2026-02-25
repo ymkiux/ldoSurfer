@@ -14,6 +14,8 @@ const DEFAULT_DAILY_AUTO = {
 const DAILY_ALARM_NAME = 'linux-do-daily-auto';
 const DAILY_PENDING_ALARM_NAME = 'linux-do-daily-auto-pending';
 const INVITES_URL_REGEX = /^https:\/\/connect\.linux\.do\/dash\/invites(?:[/?#].*)?$/;
+const CONNECT_URL_REGEX = /^https:\/\/connect\.(linux\.do|idcflare\.com)(\/|$)/;
+const CONNECT_DEFAULT_BASE = 'https://connect.linux.do';
 const SITE_URL_REGEX = /^https:\/\/(linux\.do|idcflare\.com)(\/|$)/;
 const SITE_BACKGROUND_WAIT_MS = 10 * 60 * 1000;
 const SITE_ACTIVITY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -335,13 +337,210 @@ function isAllowedInvitesUrl(url) {
   return typeof url === 'string' && INVITES_URL_REGEX.test(url);
 }
 
+function isAllowedConnectUrl(url) {
+  return typeof url === 'string' && CONNECT_URL_REGEX.test(url);
+}
+
 function isTargetSiteUrl(url) {
   return typeof url === 'string' && SITE_URL_REGEX.test(url);
+}
+
+function safeTabsQuery(queryInfo) {
+  return new Promise((resolve) => {
+    if (!chrome?.tabs?.query) {
+      resolve([]);
+      return;
+    }
+    try {
+      chrome.tabs.query(queryInfo, (tabs) => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Background] tabs.query failed', lastError.message);
+          resolve([]);
+          return;
+        }
+        resolve(tabs || []);
+      });
+    } catch (error) {
+      console.warn('[Background] tabs.query threw', error);
+      resolve([]);
+    }
+  });
+}
+
+function safeTabsCreate(createProperties) {
+  return new Promise((resolve) => {
+    if (!chrome?.tabs?.create) {
+      resolve(null);
+      return;
+    }
+    try {
+      chrome.tabs.create(createProperties, (tab) => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Background] tabs.create failed', lastError.message);
+          resolve(null);
+          return;
+        }
+        resolve(tab || null);
+      });
+    } catch (error) {
+      console.warn('[Background] tabs.create threw', error);
+      resolve(null);
+    }
+  });
+}
+
+function safeTabsRemove(tabId) {
+  return new Promise((resolve) => {
+    if (!chrome?.tabs?.remove || !Number.isFinite(tabId)) {
+      resolve(false);
+      return;
+    }
+    try {
+      chrome.tabs.remove(tabId, () => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          console.warn('[Background] tabs.remove failed', lastError.message);
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      });
+    } catch (error) {
+      console.warn('[Background] tabs.remove threw', error);
+      resolve(false);
+    }
+  });
+}
+
+function safeTabsSendMessage(tabId, message) {
+  return new Promise((resolve) => {
+    if (!chrome?.tabs?.sendMessage || !Number.isFinite(tabId)) {
+      resolve({ ok: false, error: 'tabs.sendMessage unavailable' });
+      return;
+    }
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        const lastError = chrome.runtime?.lastError;
+        if (lastError) {
+          resolve({ ok: false, error: lastError.message });
+          return;
+        }
+        resolve({ ok: true, response });
+      });
+    } catch (error) {
+      resolve({ ok: false, error: error?.message || 'Unknown error' });
+    }
+  });
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function normalizeConnectBaseUrl(input) {
+  if (typeof input === 'string') {
+    if (/connect\.idcflare\.com/.test(input)) return 'https://connect.idcflare.com';
+    if (/connect\.linux\.do/.test(input)) return 'https://connect.linux.do';
+  }
+  return CONNECT_DEFAULT_BASE;
+}
+
+function buildConnectHomeUrl(baseUrl) {
+  const clean = String(baseUrl || '').replace(/\/+$/, '');
+  return `${clean}/`;
+}
+
+function buildConnectUrlPattern(baseUrl) {
+  const clean = String(baseUrl || '').replace(/\/+$/, '');
+  return `${clean}/*`;
+}
+
+async function findConnectHomeTab(baseUrl) {
+  const tabs = await safeTabsQuery({ url: buildConnectUrlPattern(baseUrl) });
+  return tabs.find((tab) => isAllowedConnectUrl(tab?.url || tab?.pendingUrl)) || null;
+}
+
+async function createConnectHomeTab(baseUrl) {
+  return safeTabsCreate({ url: buildConnectHomeUrl(baseUrl), active: false });
+}
+
+async function requestConnectSummaryFromTab(tab) {
+  const tabId = tab?.id;
+  if (!Number.isFinite(tabId)) {
+    return { ok: false, error: 'Invalid connect tab' };
+  }
+  if (tab.status !== 'complete') {
+    await Promise.race([waitForTabComplete(tabId), delay(8000)]);
+  }
+  const message = { source: 'background', type: 'getConnectSummary' };
+  const tries = [1, 2];
+  let lastError = '';
+  for (const tryNo of tries) {
+    const result = await safeTabsSendMessage(tabId, message);
+    if (result.ok && result.response?.ok) {
+      return { ok: true, data: result.response.data };
+    }
+    if (result.ok && result.response && result.response.ok === false) {
+      lastError = result.response.error || 'Connect summary failed';
+    } else {
+      lastError = result.error || 'Connect summary failed';
+    }
+    if (/Receiving end does not exist|message port closed/i.test(lastError) && tryNo < tries.length) {
+      await delay(300);
+      continue;
+    }
+    break;
+  }
+  return { ok: false, error: lastError || 'Connect summary failed' };
+}
+
+async function fetchConnectSummaryByBackground(connectBaseUrl) {
+  const baseUrl = normalizeConnectBaseUrl(connectBaseUrl);
+  let lastError = '';
+  const existingTab = await findConnectHomeTab(baseUrl);
+  if (existingTab) {
+    const result = await requestConnectSummaryFromTab(existingTab);
+    if (result.ok) return result.data;
+    lastError = result.error || lastError;
+  }
+
+  const createdTab = await createConnectHomeTab(baseUrl);
+  const createdTabId = createdTab?.id;
+  try {
+    if (!Number.isFinite(createdTabId)) {
+      throw new Error(lastError || 'Unable to open connect tab');
+    }
+    const result = await requestConnectSummaryFromTab(createdTab);
+    if (result.ok) return result.data;
+    throw new Error(result.error || lastError || 'Connect summary failed');
+  } finally {
+    if (Number.isFinite(createdTabId)) {
+      await safeTabsRemove(createdTabId);
+    }
+  }
 }
 
 async function fetchInvitesHtmlByBackground(url) {
   if (!isAllowedInvitesUrl(url)) {
     throw new Error('Invalid invites url');
+  }
+
+  const response = await fetch(url, {
+    credentials: 'include',
+    cache: 'no-store',
+    redirect: 'follow'
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.text();
+}
+
+async function fetchConnectHtmlByBackground(url) {
+  if (!isAllowedConnectUrl(url)) {
+    throw new Error('Invalid connect url');
   }
 
   const response = await fetch(url, {
@@ -495,17 +694,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     runSafeTask(() => handleContentMessage(message, sender), 'contentMessage');
     return false;
   }
-  if (!message || message.source !== 'popup' || message.type !== 'fetchInvitesHtml') {
+  if (!message || message.source !== 'popup') {
     return false;
   }
 
-  fetchInvitesHtmlByBackground(message.url)
-    .then((html) => {
-      sendResponse({ ok: true, html });
-    })
-    .catch((error) => {
-      sendResponse({ ok: false, error: error?.message || 'Unknown error' });
-    });
+  if (message.type === 'fetchInvitesHtml') {
+    fetchInvitesHtmlByBackground(message.url)
+      .then((html) => {
+        sendResponse({ ok: true, html });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error?.message || 'Unknown error' });
+      });
+    return true;
+  }
+
+  if (message.type === 'getConnectSummary') {
+    fetchConnectSummaryByBackground(message.connectBaseUrl)
+      .then((data) => {
+        sendResponse({ ok: true, data });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error?.message || 'Unknown error' });
+      });
+    return true;
+  }
+
+  if (message.type === 'fetchConnectHtml') {
+    fetchConnectHtmlByBackground(message.url)
+      .then((html) => {
+        sendResponse({ ok: true, html });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error?.message || 'Unknown error' });
+      });
+    return true;
+  }
 
   return true;
 });

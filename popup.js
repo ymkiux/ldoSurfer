@@ -270,12 +270,12 @@ class SiteManager {
     this.storageKey = 'useIdcflareSite';
     this.useIdcflare = false;
     this.checkboxEl = null;
+    this.siteButtons = [];
   }
 
   async init() {
     this.checkboxEl = document.getElementById('useIdcflareSite');
-    if (!this.checkboxEl) return;
-
+    this.siteButtons = Array.from(document.querySelectorAll('.site-chip[data-site-id]'));
     const data = await this.loadFromStorage();
     this.useIdcflare = data || false;
     this.updateUI();
@@ -288,6 +288,14 @@ class SiteManager {
 
   getLatestUrl() {
     return `${this.getBaseUrl()}/latest`;
+  }
+
+  getConnectBaseUrl() {
+    return this.useIdcflare ? 'https://connect.idcflare.com' : 'https://connect.linux.do';
+  }
+
+  getConnectHomeUrl() {
+    return `${this.getConnectBaseUrl()}/`;
   }
 
   isCurrentSite(tabUrl) {
@@ -309,18 +317,57 @@ class SiteManager {
 
   updateUI() {
     const nameEl = document.getElementById('currentSiteName');
+    const inlineNameEl = document.getElementById('currentSiteNameInline');
+    const activeId = this.useIdcflare ? 'idcflare' : 'linuxdo';
+    if (document.body) {
+      document.body.setAttribute('data-site', activeId);
+    }
     if (nameEl) {
       nameEl.textContent = this.getSiteName();
+    }
+    if (inlineNameEl) {
+      inlineNameEl.textContent = this.getSiteName();
     }
     if (this.checkboxEl) {
       this.checkboxEl.checked = this.useIdcflare;
     }
+    if (this.siteButtons.length > 0) {
+      this.siteButtons.forEach((btn) => {
+        const isActive = btn.getAttribute('data-site-id') === activeId;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+      });
+    }
+
+    if (activeId !== 'linuxdo') {
+      const invitesTab = document.querySelector('[data-tab="invites"]');
+      const controlTab = document.querySelector('[data-tab="control"]');
+      if (invitesTab?.classList.contains('active') && controlTab) {
+        controlTab.click();
+      }
+    }
   }
 
   bindEvents() {
-    this.checkboxEl.addEventListener('change', (e) => {
-      this.toggle(e.target.checked);
-    });
+    if (this.checkboxEl) {
+      this.checkboxEl.addEventListener('change', (e) => {
+        this.toggle(e.target.checked);
+      });
+    }
+    if (this.siteButtons.length > 0) {
+      this.siteButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const siteId = btn.getAttribute('data-site-id');
+          if (siteId === 'idcflare') {
+            this.toggle(true);
+            return;
+          }
+          if (siteId === 'linuxdo') {
+            this.toggle(false);
+          }
+        });
+      });
+    }
   }
 
   async loadFromStorage() {
@@ -391,6 +438,7 @@ class PopupController {
     this.initDailyAutoToggle();
     this.loadSettings();
     this.loadLevelSummary();
+    this.initLevelBanner();
     this.startTimer();
     this.checkStatus().then(() => {
       this.updateStatus();
@@ -425,6 +473,17 @@ class PopupController {
       this.lastStartTime = state.lastStartTime || null;
       this.updateStats();
     }
+  }
+
+  initLevelBanner() {
+    const levelBanner = document.getElementById('levelBanner');
+    if (!levelBanner) return;
+    levelBanner.addEventListener('click', (event) => {
+      if (event.target.closest('#levelLoginBtn')) return;
+      if (levelBanner.dataset.loginNeeded === 'true') {
+        safeTabsCreate({ url: this.siteManager.getConnectHomeUrl() });
+      }
+    });
   }
 
   initVersionBadge() {
@@ -748,31 +807,164 @@ class PopupController {
     const visitEl = document.getElementById('levelVisitDays');
     const topicsEl = document.getElementById('levelTopics');
     const postsEl = document.getElementById('levelPosts');
+    const heroValueEl = document.getElementById('levelHeroValue');
+    const heroNameEl = document.getElementById('levelHeroName');
+    const heroDescEl = document.getElementById('levelHeroDesc');
+    const loginBtn = document.getElementById('levelLoginBtn');
+    const bannerEl = document.getElementById('levelBanner');
     if (!titleEl || !metaEl || !badgeEl) return;
 
-    try {
+    const resetMetric = (el) => {
+      if (!el) return;
+      el.textContent = '—';
+      const metricEl = el.closest('.level-metric');
+      if (metricEl) {
+        metricEl.style.setProperty('--progress', '0');
+        metricEl.classList.remove('is-met');
+      }
+    };
+
+    const setLoadingState = () => {
+      titleEl.textContent = '信任级别 —';
       metaEl.textContent = '正在获取 Connect 数据…';
-      const response = await fetch('https://connect.linux.do/', { credentials: 'include' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const html = await response.text();
-      const doc = new DOMParser().parseFromString(html, 'text/html');
+      badgeEl.textContent = '读取中';
+      badgeEl.className = 'badge';
+      if (heroValueEl) heroValueEl.textContent = '—';
+      if (heroNameEl) heroNameEl.textContent = '信任级别';
+      if (heroDescEl) heroDescEl.textContent = metaEl.textContent;
+      if (loginBtn) loginBtn.setAttribute('hidden', '');
+      if (bannerEl) {
+        bannerEl.dataset.loginNeeded = 'false';
+        bannerEl.classList.remove('is-login-needed');
+        bannerEl.classList.remove('is-empty');
+      }
+      resetMetric(visitEl);
+      resetMetric(topicsEl);
+      resetMetric(postsEl);
+    };
 
-      const cardTitle = doc.querySelector('.page-content .card .card-title') || doc.querySelector('.card .card-title');
-      const cardSubtitle = doc.querySelector('.page-content .card .card-subtitle') || doc.querySelector('.card .card-subtitle');
-      const cardBadge = doc.querySelector('.page-content .card .badge') || doc.querySelector('.card .badge');
+    setLoadingState();
 
-      if (!cardTitle) throw new Error('no data');
-      const rawTitle = cardTitle.textContent.replace('的要求', '').trim();
+    const parseConnectDocument = (doc) => {
+      const PATTERNS = {
+        TRUST_LEVEL: /(.*) - 信任级别 (\\d+)/,
+        TRUST_LEVEL_H1: /你好，.*?\\(([^)]+)\\)\\s*(\\d+)级用户/
+      };
+      const getText = (el) => (el?.textContent || '').trim();
+      const findSection = () => {
+        const candidates = Array.from(doc.querySelectorAll('.bg-white.p-6.rounded-lg, .card'));
+        return candidates.find((d) => {
+          const titleText = getText(d.querySelector('h2, .card-title'));
+          return /信任级别|trust\\s*level/i.test(titleText) || !!d.querySelector('.tl3-rings, .tl3-bars, .tl3-quota, .tl3-veto');
+        }) || null;
+      };
+
+      const pageTitle = doc.querySelector('title')?.textContent || '';
+      let username = null;
+      let level = null;
+
+      const h1El = doc.querySelector('h1');
+      if (h1El) {
+        const h1Match = getText(h1El).match(PATTERNS.TRUST_LEVEL_H1);
+        if (h1Match) {
+          username = h1Match[1];
+          level = h1Match[2];
+        }
+      }
+
+      const userInfoText = getText(doc.querySelector('.user-menu-info div:last-child')) || getText(doc.querySelector('.user-menu-info'));
+      if (userInfoText) {
+        const userInfoMatch = userInfoText.match(/@([^@\\s·|]+).*?(?:信任级别|trust\\s*level)\\s*(\\d+)/i);
+        if (userInfoMatch) {
+          if (!username) username = userInfoMatch[1];
+          if (!level) level = userInfoMatch[2];
+        }
+      }
+
+      const section = findSection();
+      const heading = getText(section?.querySelector('h2, .card-title'));
+      if (heading) {
+        const oldMatch = heading.match(PATTERNS.TRUST_LEVEL);
+        if (oldMatch) {
+          if (!username) username = oldMatch[1].trim();
+          if (!level) level = oldMatch[2];
+        }
+        const levelMatch = heading.match(/(?:信任级别|trust\\s*level)\\s*(\\d+)/i);
+        if (levelMatch && !level) level = levelMatch[1];
+      }
+
+      const subtitle = getText(section?.querySelector('.card-subtitle'));
+      if (!username && subtitle) {
+        const subtitleMatch = subtitle.match(/@([^@\\s·|]+)/);
+        if (subtitleMatch) username = subtitleMatch[1];
+      }
+
+      const metrics = {};
+      doc.querySelectorAll('.tl3-ring').forEach((ring) => {
+        const labelEl = ring.querySelector('.tl3-ring-label');
+        const currentEl = ring.querySelector('.tl3-ring-current');
+        const targetEl = ring.querySelector('.tl3-ring-target');
+        if (!labelEl || !currentEl || !targetEl) return;
+        const label = labelEl.textContent.trim();
+        const current = currentEl.textContent.trim();
+        const target = targetEl.textContent.replace('/', '').trim();
+        if (!label) return;
+        metrics[label] = { current, target };
+      });
+
+      const badgeEl = section?.querySelector('.badge, .status-met, .status-unmet, p[class*=\"status\"]')
+        || doc.querySelector('.page-content .card .badge') || doc.querySelector('.card .badge');
+
+      const titleText = heading ? heading.replace('的要求', '').trim() : (level ? `信任级别 ${level}` : '');
+      const subtitleText = subtitle || userInfoText || (username ? `@${username}` : '');
+      const loggedIn = !!(level || username || subtitleText || Object.keys(metrics).length > 0);
+
+      return {
+        title: titleText,
+        subtitle: subtitleText,
+        badge: getText(badgeEl),
+        loggedIn,
+        metrics,
+        pageTitle
+      };
+    };
+
+    const applySummary = (summary) => {
+      if (!summary || typeof summary !== 'object') {
+        throw new Error('no_data');
+      }
+      const pageTitle = summary.pageTitle || '';
+      const metrics = summary.metrics || {};
+      const hasMetrics = Object.keys(metrics).length > 0;
+      const loggedIn = summary.loggedIn === true || hasMetrics;
+      const isLoginPage = /登录|Login|Sign in/i.test(pageTitle);
+      if (!loggedIn || isLoginPage) throw new Error('not_logged_in');
+      const rawTitle = (summary.title || '').replace('的要求', '').trim();
+      if (!rawTitle) throw new Error('no_data');
+
       const titleMatch = rawTitle.match(/(信任级别)\s*(\d+)/);
       if (titleMatch) {
         titleEl.innerHTML = `<span class="level-title-label">${titleMatch[1]}</span><span class="level-title-value">${titleMatch[2]}</span>`;
+        if (heroValueEl) heroValueEl.textContent = titleMatch[2];
+        if (heroNameEl) heroNameEl.textContent = titleMatch[1];
       } else {
         titleEl.textContent = rawTitle;
+        if (heroValueEl) heroValueEl.textContent = '—';
       }
-      metaEl.textContent = cardSubtitle ? cardSubtitle.textContent.trim() : '数据来自 Connect';
 
-      const badgeText = cardBadge ? cardBadge.textContent.trim() : '—';
-      badgeEl.textContent = badgeText;
+      const subtitleText = (summary.subtitle || '').trim();
+      const syncTime = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      metaEl.textContent = subtitleText ? `${subtitleText} · 同步 ${syncTime}` : `已同步 ${syncTime}`;
+      if (heroDescEl) heroDescEl.textContent = metaEl.textContent;
+      if (loginBtn) loginBtn.setAttribute('hidden', '');
+      if (bannerEl) {
+        bannerEl.dataset.loginNeeded = 'false';
+        bannerEl.classList.remove('is-login-needed');
+        bannerEl.classList.remove('is-empty');
+      }
+
+      const badgeText = (summary.badge || '—').trim();
+      badgeEl.textContent = badgeText || '—';
       badgeEl.className = 'badge';
       if (/已达|已达到/.test(badgeText)) {
         badgeEl.classList.add('badge-success');
@@ -785,6 +977,8 @@ class PopupController {
         ['浏览话题', topicsEl],
         ['浏览帖子', postsEl]
       ];
+
+      let updatedCount = 0;
 
       const setMetricValue = (outputEl, value) => {
         if (!outputEl) return;
@@ -799,41 +993,121 @@ class PopupController {
             metricEl.style.setProperty('--progress', progress.toFixed(3));
             metricEl.classList.toggle('is-met', current >= target);
           }
+          updatedCount += 1;
         } else {
           outputEl.textContent = value;
+          if (String(value).trim()) updatedCount += 1;
         }
       };
 
-      doc.querySelectorAll('.tl3-ring').forEach((ring) => {
-        const labelEl = ring.querySelector('.tl3-ring-label');
-        const currentEl = ring.querySelector('.tl3-ring-current');
-        const targetEl = ring.querySelector('.tl3-ring-target');
-        if (!labelEl || !currentEl || !targetEl) return;
-        const label = labelEl.textContent.trim();
-        const entry = mapping.find(([name]) => name === label);
-        if (!entry) return;
-        const outputEl = entry[1];
-        const current = currentEl.textContent.trim();
-        const target = targetEl.textContent.replace('/', '').trim();
-        setMetricValue(outputEl, `${current}/${target}`);
-      });
-    } catch (error) {
-      titleEl.textContent = '信任级别 —';
-      metaEl.textContent = '未登录或无法读取数据';
-      badgeEl.textContent = '未获取';
-      badgeEl.className = 'badge badge-warning';
-      const resetMetric = (el) => {
-        if (!el) return;
-        el.textContent = '—';
-        const metricEl = el.closest('.level-metric');
-        if (metricEl) {
-          metricEl.style.setProperty('--progress', '0');
-          metricEl.classList.remove('is-met');
+      mapping.forEach(([label, outputEl]) => {
+        if (!outputEl) return;
+        const metric = metrics[label];
+        if (!metric) return;
+        if (typeof metric === 'object') {
+          const current = String(metric.current ?? '').trim();
+          const target = String(metric.target ?? '').trim();
+          if (current && target) {
+            setMetricValue(outputEl, `${current}/${target}`);
+          }
+        } else {
+          setMetricValue(outputEl, String(metric));
         }
-      };
+      });
+
+      if (updatedCount === 0) {
+        throw new Error('no_metrics');
+      }
+    };
+
+    try {
+      try {
+        const summary = await this.fetchConnectSummaryByBackground();
+        applySummary(summary);
+        return;
+      } catch (error) {
+        if (error?.message === 'not_logged_in') {
+          throw error;
+        }
+      }
+
+      const fetchUrl = `${this.siteManager.getConnectBaseUrl()}/?t=${Date.now()}`;
+      const html = await this.fetchConnectHtmlWithFallback(fetchUrl);
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const summary = parseConnectDocument(doc);
+      applySummary(summary);
+    } catch (error) {
+      const notLoggedIn = error?.message === 'not_logged_in';
+      titleEl.textContent = '信任级别 —';
+      metaEl.textContent = notLoggedIn ? '未登录 Connect' : '无法读取 Connect 数据';
+      badgeEl.textContent = notLoggedIn ? '未登录' : '未获取';
+      badgeEl.className = 'badge badge-warning';
+      if (heroValueEl) heroValueEl.textContent = '—';
+      if (heroNameEl) heroNameEl.textContent = '信任级别';
+      if (heroDescEl) heroDescEl.textContent = metaEl.textContent;
+      if (loginBtn) {
+        if (notLoggedIn) {
+          loginBtn.removeAttribute('hidden');
+          loginBtn.onclick = () => safeTabsCreate({ url: this.siteManager.getConnectHomeUrl() });
+        } else {
+          loginBtn.setAttribute('hidden', '');
+          loginBtn.onclick = null;
+        }
+      }
+      if (bannerEl) {
+        bannerEl.dataset.loginNeeded = notLoggedIn ? 'true' : 'false';
+        bannerEl.classList.toggle('is-login-needed', notLoggedIn);
+        bannerEl.classList.add('is-empty');
+      }
       resetMetric(visitEl);
       resetMetric(topicsEl);
       resetMetric(postsEl);
+    }
+  }
+
+  async fetchConnectSummaryByBackground() {
+    const result = await safeRuntimeSendMessage({
+      source: 'popup',
+      type: 'getConnectSummary',
+      connectBaseUrl: this.siteManager.getConnectBaseUrl()
+    }, null);
+
+    if (result && result.ok && result.data) {
+      return result.data;
+    }
+
+    const error = new Error(result?.error || 'Connect summary failed');
+    error.cause = result;
+    throw error;
+  }
+
+  async fetchConnectHtmlWithFallback(url) {
+    try {
+      const response = await fetch(url, {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (response.redirected && /login|signin|auth/i.test(response.url)) {
+        throw new Error('not_logged_in');
+      }
+      return response.text();
+    } catch (popupError) {
+      const result = await safeRuntimeSendMessage({
+        source: 'popup',
+        type: 'fetchConnectHtml',
+        url
+      }, null);
+
+      if (result && result.ok && typeof result.html === 'string') {
+        return result.html;
+      }
+
+      const backgroundMessage = result?.error || 'Background fetch failed';
+      const error = new Error(`Connect fetch failed. popup=${popupError?.message || 'unknown'}; background=${backgroundMessage}`);
+      error.cause = { popupError, backgroundResult: result };
+      throw error;
     }
   }
 
