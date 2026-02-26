@@ -7,15 +7,16 @@ const AVAILABLE_THEMES = [
 ];
 const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
 const DEFAULT_DAILY_AUTO = {
-  enabled: true,
+  enabled: false,
   target: 50,
-  time: '09:00',
-  endTime: '19:00',
+  time: '01:00',
+  endTime: '11:00',
   date: '',
   count: 0,
   running: false,
   requireHidden: true
 };
+const DAILY_ENABLED_MIGRATION_FLAG = 'migratedDailyAutoDisabled';
 const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_UI_KEY = 'linuxDoDebugUi';
 const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
@@ -1226,14 +1227,16 @@ class PopupController {
     this.dailyAutoToggleEl = document.getElementById('dailyAutoEnabled');
     this.dailyAutoTimeEl = document.getElementById('dailyAutoTime');
     this.dailyAutoRequireHiddenEl = document.getElementById('dailyAutoRequireHidden');
-    if (!this.dailyAutoToggleEl || !this.dailyAutoTimeEl) return;
+    if (!this.dailyAutoToggleEl) return;
     this.loadDailyAutoConfig();
     this.dailyAutoToggleEl.addEventListener('change', (e) => {
       this.saveDailyAutoConfig(e.target.checked);
     });
-    this.dailyAutoTimeEl.addEventListener('change', (e) => {
-      this.saveDailyAutoTime(e.target.value);
-    });
+    if (this.dailyAutoTimeEl) {
+      this.dailyAutoTimeEl.addEventListener('change', (e) => {
+        this.saveDailyAutoTime(e.target.value);
+      });
+    }
     if (this.dailyAutoRequireHiddenEl) {
       this.dailyAutoRequireHiddenEl.addEventListener('change', (e) => {
         this.saveDailyAutoRequireHidden(e.target.checked);
@@ -1244,20 +1247,31 @@ class PopupController {
   loadDailyAutoConfig() {
     safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
+      const shouldMigrateEnabled = config[DAILY_ENABLED_MIGRATION_FLAG] !== true;
+      if (shouldMigrateEnabled) {
+        config.enabled = false;
+        config.running = false;
+      }
       this.dailyAutoToggleEl.checked = config.enabled !== false;
       if (this.dailyAutoRequireHiddenEl) {
         this.dailyAutoRequireHiddenEl.checked = config.requireHidden === true;
       }
-      config.time = this.normalizeDailyTime(config.time);
+      config.time = DEFAULT_DAILY_AUTO.time;
       config.endTime = this.defaultDailyEndTime(config.time);
-      this.dailyAutoTimeEl.value = config.time;
+      if (shouldMigrateEnabled) {
+        config[DAILY_ENABLED_MIGRATION_FLAG] = true;
+      }
+      if (this.dailyAutoTimeEl) {
+        this.dailyAutoTimeEl.value = config.time;
+      }
       const stored = result[DAILY_AUTO_KEY];
       const shouldSave =
         !stored ||
         stored.time !== config.time ||
         stored.endTime !== config.endTime ||
         stored.enabled !== config.enabled ||
-        stored.requireHidden !== config.requireHidden;
+        stored.requireHidden !== config.requireHidden ||
+        stored[DAILY_ENABLED_MIGRATION_FLAG] !== config[DAILY_ENABLED_MIGRATION_FLAG];
       if (shouldSave) {
         safeStorageSet({ [DAILY_AUTO_KEY]: config });
       }
@@ -1292,7 +1306,7 @@ class PopupController {
   }
 
   saveDailyAutoTime(time) {
-    const normalized = this.normalizeDailyTime(time);
+    const normalized = DEFAULT_DAILY_AUTO.time;
     safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.time = normalized;
@@ -1308,7 +1322,7 @@ class PopupController {
       if (this.dailyAutoRequireHiddenEl) {
         config.requireHidden = this.dailyAutoRequireHiddenEl.checked;
       }
-      config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
+      config.time = DEFAULT_DAILY_AUTO.time;
       config.endTime = this.defaultDailyEndTime(config.time);
       if (!enabled) {
         config.running = false;
@@ -1321,7 +1335,7 @@ class PopupController {
     safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
       const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
       config.requireHidden = requireHidden;
-      config.time = this.normalizeDailyTime(this.dailyAutoTimeEl.value);
+      config.time = DEFAULT_DAILY_AUTO.time;
       config.endTime = this.defaultDailyEndTime(config.time);
       safeStorageSet({ [DAILY_AUTO_KEY]: config });
     });

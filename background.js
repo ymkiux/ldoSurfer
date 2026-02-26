@@ -2,15 +2,16 @@
 const DAILY_PENDING_KEY = 'linuxDoDailyAutoPending';
 const SITE_ACTIVITY_KEY = 'linuxDoSiteActivity';
 const DEFAULT_DAILY_AUTO = {
-  enabled: true,
+  enabled: false,
   target: 50,
-  time: '09:00',
-  endTime: '19:00',
+  time: '01:00',
+  endTime: '11:00',
   date: '',
   count: 0,
   running: false,
   requireHidden: true
 };
+const DAILY_ENABLED_MIGRATION_FLAG = 'migratedDailyAutoDisabled';
 const DAILY_ALARM_NAME = 'linux-do-daily-auto';
 const DAILY_PENDING_ALARM_NAME = 'linux-do-daily-auto-pending';
 const INVITES_URL_REGEX = /^https:\/\/connect\.linux\.do\/dash\/invites(?:[/?#].*)?$/;
@@ -113,8 +114,16 @@ function getNextRunTime(time) {
 function normalizeDailyAuto(raw) {
   const today = getTodayString();
   const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
-  config.time = normalizeDailyTime(config.time);
+  const shouldMigrateEnabled = config[DAILY_ENABLED_MIGRATION_FLAG] !== true;
+  if (shouldMigrateEnabled) {
+    config.enabled = false;
+    config.running = false;
+  }
+  config.time = DEFAULT_DAILY_AUTO.time;
   config.endTime = defaultDailyEndTime(config.time);
+  if (shouldMigrateEnabled) {
+    config[DAILY_ENABLED_MIGRATION_FLAG] = true;
+  }
   config.requireHidden = config.requireHidden === true;
   if (config.date !== today) {
     config.date = today;

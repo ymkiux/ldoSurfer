@@ -7,7 +7,7 @@
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green?logo=google-chrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0.6-orange.svg)
 
 **模拟人类浏览行为，自动浏览 linux.do 帖子 | Chrome 浏览器自动化扩展**
 </div>
@@ -91,9 +91,9 @@ cd ldoSurfer
 位置：**高级浏览设置** 内
 
 1. 打开扩展弹窗并展开 **高级浏览设置**
-2. 启用 **每日自动浏览**
-3. 设置每日开始时间（HH:MM）
-4. 每日结束时间固定为开始时间 + 10 小时
+2. 启用 **每日自动浏览**（默认关闭）
+3. 每日开始时间固定为 01:00
+4. 每日结束时间固定为开始时间 + 10 小时（11:00）
 5. 到点后自动打开 `/latest` 并开始浏览
 
 **注意**

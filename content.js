@@ -7,15 +7,16 @@ const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_LIMIT = 50;
 const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
 const DEFAULT_DAILY_AUTO = {
-  enabled: true,
+  enabled: false,
   target: 50,
-  time: '09:00',
-  endTime: '19:00',
+  time: '01:00',
+  endTime: '11:00',
   date: '',
   count: 0,
   running: false,
   requireHidden: true
 };
+const DAILY_ENABLED_MIGRATION_FLAG = 'migratedDailyAutoDisabled';
 const DAILY_AUTO_IDLE_WAIT_MS = 10 * 60 * 1000;
 const SITE_ACTIVITY_REPORT_INTERVAL_MS = 15 * 1000;
 const DEFAULT_DAILY_AUTO_IDLE = {
@@ -212,8 +213,16 @@ class HumanBrowser {
   normalizeDailyAuto(raw) {
     const today = this.getTodayString();
     const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
-    config.time = this.normalizeDailyTime(config.time);
+    const shouldMigrateEnabled = config[DAILY_ENABLED_MIGRATION_FLAG] !== true;
+    if (shouldMigrateEnabled) {
+      config.enabled = false;
+      config.running = false;
+    }
+    config.time = DEFAULT_DAILY_AUTO.time;
     config.endTime = this.defaultDailyEndTime(config.time);
+    if (shouldMigrateEnabled) {
+      config[DAILY_ENABLED_MIGRATION_FLAG] = true;
+    }
     config.requireHidden = config.requireHidden === true;
     const normalizedDate = this.parseDateString(config.date) ? config.date : today;
     config.date = normalizedDate;
@@ -252,7 +261,8 @@ class HumanBrowser {
       stored.time !== normalized.time ||
       stored.endTime !== normalized.endTime ||
       stored.date !== normalized.date ||
-      stored.enabled !== normalized.enabled;
+      stored.enabled !== normalized.enabled ||
+      stored[DAILY_ENABLED_MIGRATION_FLAG] !== normalized[DAILY_ENABLED_MIGRATION_FLAG];
     if (shouldSave) {
       await this.safeStorageSet({ [DAILY_AUTO_KEY]: normalized });
     }

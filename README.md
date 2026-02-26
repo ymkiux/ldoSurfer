@@ -7,7 +7,7 @@
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green?logo=google-chrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0.6-orange.svg)
 
 **Simulate human browsing behavior, automatically browse linux.do posts | Chrome Browser Automation Extension**
 
@@ -92,9 +92,9 @@ cd ldoSurfer
 Location: **Advanced Browse Settings**
 
 1. Open the extension popup and expand **Advanced Browse Settings**
-2. Enable **Daily Auto Browse**
-3. Set the daily start time (HH:MM)
-4. Daily end time is fixed to start time + 10 hours
+2. Enable **Daily Auto Browse** (disabled by default)
+3. Daily start time is fixed at 01:00
+4. Daily end time is fixed to start time + 10 hours (11:00)
 5. At the scheduled time, the extension opens `/latest` and starts browsing automatically
 
 **Notes**
