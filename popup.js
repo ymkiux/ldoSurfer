@@ -7,8 +7,10 @@ const AVAILABLE_THEMES = [
 ];
 const DAILY_AUTO_KEY = 'linuxDoDailyAuto';
 const DEFAULT_DAILY_AUTO = {
-  enabled: false,
-  target: 50,
+  // 固定：每日任务默认开启
+  enabled: true,
+  // 固定：每日执行 10 次（浏览 10 个话题）
+  target: 10,
   time: '01:00',
   endTime: '11:00',
   date: '',
@@ -16,7 +18,6 @@ const DEFAULT_DAILY_AUTO = {
   running: false,
   requireHidden: true
 };
-const DAILY_ENABLED_MIGRATION_FLAG = 'migratedDailyAutoDisabled';
 const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_UI_KEY = 'linuxDoDebugUi';
 const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
@@ -436,7 +437,7 @@ class PopupController {
     this.initVersionBadge();
     this.bindEvents();
     this.initInternalLogTools();
-    this.initDailyAutoToggle();
+    this.ensureDailyAutoConfig();
     this.loadSettings();
     this.loadLevelSummary();
     this.initLevelBanner();
@@ -1223,121 +1224,27 @@ class PopupController {
     });
   }
 
-  initDailyAutoToggle() {
-    this.dailyAutoToggleEl = document.getElementById('dailyAutoEnabled');
-    this.dailyAutoTimeEl = document.getElementById('dailyAutoTime');
-    this.dailyAutoRequireHiddenEl = document.getElementById('dailyAutoRequireHidden');
-    if (!this.dailyAutoToggleEl) return;
-    this.loadDailyAutoConfig();
-    this.dailyAutoToggleEl.addEventListener('change', (e) => {
-      this.saveDailyAutoConfig(e.target.checked);
-    });
-    if (this.dailyAutoTimeEl) {
-      this.dailyAutoTimeEl.addEventListener('change', (e) => {
-        this.saveDailyAutoTime(e.target.value);
-      });
-    }
-    if (this.dailyAutoRequireHiddenEl) {
-      this.dailyAutoRequireHiddenEl.addEventListener('change', (e) => {
-        this.saveDailyAutoRequireHidden(e.target.checked);
-      });
-    }
-  }
-
-  loadDailyAutoConfig() {
+  // 固定：不再提供 UI 开关，确保本地配置被刷新为“每日 10 次、仅 linux.do”
+  ensureDailyAutoConfig() {
     safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
-      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
-      const shouldMigrateEnabled = config[DAILY_ENABLED_MIGRATION_FLAG] !== true;
-      if (shouldMigrateEnabled) {
-        config.enabled = false;
-        config.running = false;
-      }
-      this.dailyAutoToggleEl.checked = config.enabled !== false;
-      if (this.dailyAutoRequireHiddenEl) {
-        this.dailyAutoRequireHiddenEl.checked = config.requireHidden === true;
-      }
+      const stored = result[DAILY_AUTO_KEY] || {};
+      const config = { ...DEFAULT_DAILY_AUTO, ...(stored || {}) };
+      config.enabled = true;
+      config.target = DEFAULT_DAILY_AUTO.target;
       config.time = DEFAULT_DAILY_AUTO.time;
-      config.endTime = this.defaultDailyEndTime(config.time);
-      if (shouldMigrateEnabled) {
-        config[DAILY_ENABLED_MIGRATION_FLAG] = true;
-      }
-      if (this.dailyAutoTimeEl) {
-        this.dailyAutoTimeEl.value = config.time;
-      }
-      const stored = result[DAILY_AUTO_KEY];
+      config.endTime = DEFAULT_DAILY_AUTO.endTime;
+      config.requireHidden = stored?.requireHidden === false ? false : true;
+
       const shouldSave =
         !stored ||
+        stored.enabled !== config.enabled ||
+        stored.target !== config.target ||
         stored.time !== config.time ||
         stored.endTime !== config.endTime ||
-        stored.enabled !== config.enabled ||
-        stored.requireHidden !== config.requireHidden ||
-        stored[DAILY_ENABLED_MIGRATION_FLAG] !== config[DAILY_ENABLED_MIGRATION_FLAG];
+        stored.requireHidden !== config.requireHidden;
       if (shouldSave) {
         safeStorageSet({ [DAILY_AUTO_KEY]: config });
       }
-    });
-  }
-
-  parseDailyTime(time) {
-    if (!time || typeof time !== 'string') return { hour: 9, minute: 0, valid: false };
-    const parts = time.split(':');
-    if (parts.length !== 2) return { hour: 9, minute: 0, valid: false };
-    const hour = Number(parts[0]);
-    const minute = Number(parts[1]);
-    if (!Number.isInteger(hour) || !Number.isInteger(minute)) return { hour: 9, minute: 0, valid: false };
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return { hour: 9, minute: 0, valid: false };
-    return { hour, minute, valid: true };
-  }
-
-  formatDailyTime(hour, minute) {
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }
-
-  normalizeDailyTime(time) {
-    const parsed = this.parseDailyTime(time);
-    return this.formatDailyTime(parsed.hour, parsed.minute);
-  }
-
-  defaultDailyEndTime(startTime) {
-    const parsed = this.parseDailyTime(startTime);
-    const totalMinutes = parsed.hour * 60 + parsed.minute + 600;
-    const normalizedMinutes = totalMinutes % (24 * 60);
-    return this.formatDailyTime(Math.floor(normalizedMinutes / 60), normalizedMinutes % 60);
-  }
-
-  saveDailyAutoTime(time) {
-    const normalized = DEFAULT_DAILY_AUTO.time;
-    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
-      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
-      config.time = normalized;
-      config.endTime = this.defaultDailyEndTime(normalized);
-      safeStorageSet({ [DAILY_AUTO_KEY]: config });
-    });
-  }
-
-  saveDailyAutoConfig(enabled) {
-    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
-      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
-      config.enabled = enabled;
-      if (this.dailyAutoRequireHiddenEl) {
-        config.requireHidden = this.dailyAutoRequireHiddenEl.checked;
-      }
-      config.time = DEFAULT_DAILY_AUTO.time;
-      config.endTime = this.defaultDailyEndTime(config.time);
-      if (!enabled) {
-        config.running = false;
-      }
-      safeStorageSet({ [DAILY_AUTO_KEY]: config });
-    });
-  }
-
-  saveDailyAutoRequireHidden(requireHidden) {
-    safeStorageGet([DAILY_AUTO_KEY]).then((result) => {
-      const config = { ...DEFAULT_DAILY_AUTO, ...(result[DAILY_AUTO_KEY] || {}) };
-      config.requireHidden = requireHidden;
-      config.time = DEFAULT_DAILY_AUTO.time;
-      config.endTime = this.defaultDailyEndTime(config.time);
-      safeStorageSet({ [DAILY_AUTO_KEY]: config });
     });
   }
 
@@ -1895,8 +1802,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
-
-
 
 
 

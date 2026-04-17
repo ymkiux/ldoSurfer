@@ -145,15 +145,6 @@
               </div>
               <div class="setting-item setting-item--switch">
                 <label class="switch-label" style="padding:0">
-                  <input type="checkbox" id="dailyAutoEnabled" class="switch-checkbox">
-                  <span class="switch-text">
-                    <span class="switch-title">每日自动</span>
-                    <span class="switch-sub">01:00 / 10h</span>
-                  </span>
-                </label>
-              </div>
-              <div class="setting-item setting-item--switch">
-                <label class="switch-label" style="padding:0">
                   <input type="checkbox" id="skipDailyIdleWait" class="switch-checkbox">
                   <span class="switch-text">
                     <span class="switch-title">切换直达</span>
@@ -317,7 +308,7 @@
           <ol class="guide-list">
             <li>确认已登录 Linux DO 或 IDCFlare</li>
             <li>设置浏览参数后点击「开始浏览」</li>
-            <li>需要定时：开启「每日自动浏览」，开始时间固定为 01:00，系统会自动持续 10 小时</li>
+            <li>每日自动任务固定每天执行 10 次（浏览 10 个话题），开始时间固定为 01:00（仅 Linux DO）</li>
             <li>切换到 tab 后，默认等待 10 分钟无操作才开始，可在高级浏览设置中开启「切换直接执行」免等待</li>
             <li>任何时候点击「停止」即可终止</li>
             <li>插件里的「帖子」对应论坛里的「话题」（文章）</li>
@@ -340,7 +331,6 @@
   <script src="popup.js"></script>
 </body>
 </html>
-
 
 
 

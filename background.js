@@ -2,8 +2,10 @@
 const DAILY_PENDING_KEY = 'linuxDoDailyAutoPending';
 const SITE_ACTIVITY_KEY = 'linuxDoSiteActivity';
 const DEFAULT_DAILY_AUTO = {
-  enabled: false,
-  target: 50,
+  // 固定：每日任务默认开启
+  enabled: true,
+  // 固定：每日执行 10 次（浏览 10 个新话题）
+  target: 10,
   time: '01:00',
   endTime: '11:00',
   date: '',
@@ -11,7 +13,6 @@ const DEFAULT_DAILY_AUTO = {
   running: false,
   requireHidden: true
 };
-const DAILY_ENABLED_MIGRATION_FLAG = 'migratedDailyAutoDisabled';
 const DAILY_ALARM_NAME = 'linux-do-daily-auto';
 const DAILY_PENDING_ALARM_NAME = 'linux-do-daily-auto-pending';
 const INVITES_URL_REGEX = /^https:\/\/connect\.linux\.do\/dash\/invites(?:[/?#].*)?$/;
@@ -114,16 +115,10 @@ function getNextRunTime(time) {
 function normalizeDailyAuto(raw) {
   const today = getTodayString();
   const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
-  const shouldMigrateEnabled = config[DAILY_ENABLED_MIGRATION_FLAG] !== true;
-  if (shouldMigrateEnabled) {
-    config.enabled = false;
-    config.running = false;
-  }
+  // 固定：不再暴露开关，始终开启
+  config.enabled = true;
   config.time = DEFAULT_DAILY_AUTO.time;
   config.endTime = defaultDailyEndTime(config.time);
-  if (shouldMigrateEnabled) {
-    config[DAILY_ENABLED_MIGRATION_FLAG] = true;
-  }
   config.requireHidden = config.requireHidden === true;
   if (config.date !== today) {
     config.date = today;
@@ -154,6 +149,7 @@ function normalizeSiteActivity(raw) {
     const entry = rawTabs[tabId];
     if (!entry || typeof entry !== 'object') return;
     tabs[tabId] = {
+      site: typeof entry.site === 'string' ? entry.site : '',
       visible: entry.visible === true,
       lastVisibleAt: Number.isFinite(entry.lastVisibleAt) ? entry.lastVisibleAt : 0,
       lastHiddenAt: Number.isFinite(entry.lastHiddenAt) ? entry.lastHiddenAt : 0,
@@ -190,12 +186,16 @@ function updateTabEntry(activity, tabId, patch) {
   const key = String(tabId);
   const now = Number.isFinite(patch?.at) ? patch.at : Date.now();
   const entry = tabs[key] || {
+    site: '',
     visible: false,
     lastVisibleAt: 0,
     lastHiddenAt: 0,
     lastActivityAt: 0,
     lastSeenAt: 0
   };
+  if (typeof patch?.site === 'string') {
+    entry.site = patch.site;
+  }
   if (typeof patch?.visible === 'boolean') {
     entry.visible = patch.visible;
     if (patch.visible) {
@@ -211,24 +211,27 @@ function updateTabEntry(activity, tabId, patch) {
   tabs[key] = entry;
 }
 
-async function recordTabVisibility(tabId, visible, at) {
+async function recordTabVisibility(tabId, visible, at, site) {
   const now = Number.isFinite(at) ? at : Date.now();
   const activity = await loadSiteActivity();
   pruneSiteActivity(activity, now);
-  updateTabEntry(activity, tabId, { visible, at: now, activityAt: visible ? now : undefined });
+  updateTabEntry(activity, tabId, { visible, at: now, activityAt: visible ? now : undefined, site });
   await saveSiteActivity(activity);
 }
 
-async function recordTabActivity(tabId, at) {
+async function recordTabActivity(tabId, at, site) {
   const now = Number.isFinite(at) ? at : Date.now();
   const activity = await loadSiteActivity();
   pruneSiteActivity(activity, now);
-  updateTabEntry(activity, tabId, { activityAt: now, at: now });
+  updateTabEntry(activity, tabId, { activityAt: now, at: now, site });
   await saveSiteActivity(activity);
 }
 
-function getSiteBackgroundInfo(activity, now) {
-  const entries = Object.values(activity.tabs || {});
+function getSiteBackgroundInfo(activity, now, siteId) {
+  const entries = Object.values(activity.tabs || {}).filter((entry) => {
+    if (!siteId) return true;
+    return entry?.site === siteId;
+  });
   let anyVisible = false;
   let lastVisibleAt = 0;
   let lastActivityAt = 0;
@@ -251,6 +254,13 @@ function getSiteBackgroundInfo(activity, now) {
   }
   const readyAt = lastInteractiveAt + SITE_BACKGROUND_WAIT_MS;
   return { ready: now >= readyAt, readyAt, reason: now >= readyAt ? 'ready' : 'recentActivity' };
+}
+
+function getSiteIdFromUrl(url) {
+  if (typeof url !== 'string') return '';
+  if (/idcflare\.com/i.test(url)) return 'idcflare';
+  if (/linux\.do/i.test(url)) return 'linuxdo';
+  return '';
 }
 
 function normalizeDailyPending(raw) {
@@ -295,10 +305,8 @@ function runSafeTask(task, label) {
 }
 
 function getBaseUrl() {
-  return safeStorageGet(['useIdcflareSite']).then((result) => {
-    const useIdcflare = result.useIdcflareSite || false;
-    return useIdcflare ? 'https://idcflare.com' : 'https://linux.do';
-  });
+  // 固定：每日任务仅对 linux.do（linuxfo）生效
+  return Promise.resolve('https://linux.do');
 }
 
 function scheduleDailyAlarm(config) {
@@ -587,7 +595,8 @@ async function runDailyAuto() {
     const pending = await loadDailyPending();
     const activity = await loadSiteActivity();
     pruneSiteActivity(activity, now);
-    const backgroundInfo = getSiteBackgroundInfo(activity, now);
+    // 固定：每日任务仅对 linux.do（linuxfo）生效，因此仅参考 linux.do 的活动状态
+    const backgroundInfo = getSiteBackgroundInfo(activity, now, 'linuxdo');
     let ready = backgroundInfo.ready;
     let readyAt = backgroundInfo.readyAt;
     if (!ready && backgroundInfo.reason === 'noData' && pending.pending && pending.requestedAt) {
@@ -639,13 +648,14 @@ async function handleContentMessage(message, sender) {
   if (!tabId) return;
   const tabUrl = sender?.tab?.url;
   if (!isTargetSiteUrl(tabUrl)) return;
+  const siteId = getSiteIdFromUrl(tabUrl);
   if (message.type === 'siteVisibility') {
-    await recordTabVisibility(tabId, message.visible === true, Number(message.at));
+    await recordTabVisibility(tabId, message.visible === true, Number(message.at), siteId);
     await runPendingDailyAuto();
     return;
   }
   if (message.type === 'siteActivity') {
-    await recordTabActivity(tabId, Number(message.at));
+    await recordTabActivity(tabId, Number(message.at), siteId);
   }
 }
 
@@ -750,9 +760,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
     scheduleDailyAlarm(changes[DAILY_AUTO_KEY].newValue);
   }, 'storage.onChanged');
 });
-
-
-
 
 
 

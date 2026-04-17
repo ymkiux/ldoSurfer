@@ -92,14 +92,13 @@ cd ldoSurfer
 Location: **Advanced Browse Settings**
 
 1. Open the extension popup and expand **Advanced Browse Settings**
-2. Enable **Daily Auto Browse** (disabled by default)
-3. Daily start time is fixed at 01:00
-4. Daily end time is fixed to start time + 10 hours (11:00)
-5. At the scheduled time, the extension opens `/latest` and starts browsing automatically
+2. The daily schedule is **always enabled** (no toggle)
+3. Daily start time is fixed at **01:00**
+4. It will run **10 times per day** (browse 10 new topics) and stop automatically
+5. At the scheduled time, the extension opens `/latest` and starts browsing automatically (**linux.do only**)
 
 **Notes**
-- The toggle must be enabled; disabling it cancels the schedule
-- You must be on linux.do or idcflare.com for actions to work
+- The daily schedule runs on **linux.do** only
 - Auto browse starts only after site tabs stay hidden and inactive for 10 minutes (best-effort)
 - Terminology: "Post" in the extension corresponds to a forum "Topic" (article); "Comment" in the extension corresponds to a forum "Post"
 
@@ -132,5 +131,4 @@ Location: **Advanced Browse Settings**
 If you find this project helpful, consider giving it a star ⭐
 
 </div>
-
 

@@ -7,8 +7,10 @@ const INTERNAL_LOG_KEY = 'linuxDoInternalLogs';
 const INTERNAL_LOG_LIMIT = 50;
 const STOP_SIGNAL_KEY = 'linuxDoStopSignalAt';
 const DEFAULT_DAILY_AUTO = {
-  enabled: false,
-  target: 50,
+  // 固定：每日任务默认开启
+  enabled: true,
+  // 固定：每日执行 10 次（浏览 10 个新话题）
+  target: 10,
   time: '01:00',
   endTime: '11:00',
   date: '',
@@ -16,7 +18,6 @@ const DEFAULT_DAILY_AUTO = {
   running: false,
   requireHidden: true
 };
-const DAILY_ENABLED_MIGRATION_FLAG = 'migratedDailyAutoDisabled';
 const DAILY_AUTO_IDLE_WAIT_MS = 10 * 60 * 1000;
 const SITE_ACTIVITY_REPORT_INTERVAL_MS = 15 * 1000;
 const DEFAULT_DAILY_AUTO_IDLE = {
@@ -213,16 +214,10 @@ class HumanBrowser {
   normalizeDailyAuto(raw) {
     const today = this.getTodayString();
     const config = { ...DEFAULT_DAILY_AUTO, ...(raw || {}) };
-    const shouldMigrateEnabled = config[DAILY_ENABLED_MIGRATION_FLAG] !== true;
-    if (shouldMigrateEnabled) {
-      config.enabled = false;
-      config.running = false;
-    }
+    // 固定：不再暴露开关，始终开启
+    config.enabled = true;
     config.time = DEFAULT_DAILY_AUTO.time;
     config.endTime = this.defaultDailyEndTime(config.time);
-    if (shouldMigrateEnabled) {
-      config[DAILY_ENABLED_MIGRATION_FLAG] = true;
-    }
     config.requireHidden = config.requireHidden === true;
     const normalizedDate = this.parseDateString(config.date) ? config.date : today;
     config.date = normalizedDate;
@@ -262,7 +257,8 @@ class HumanBrowser {
       stored.endTime !== normalized.endTime ||
       stored.date !== normalized.date ||
       stored.enabled !== normalized.enabled ||
-      stored[DAILY_ENABLED_MIGRATION_FLAG] !== normalized[DAILY_ENABLED_MIGRATION_FLAG];
+      stored.target !== normalized.target ||
+      stored.requireHidden !== normalized.requireHidden;
     if (shouldSave) {
       await this.safeStorageSet({ [DAILY_AUTO_KEY]: normalized });
     }
@@ -435,6 +431,11 @@ class HumanBrowser {
     if (isNewPost) {
       this.dailyAuto.count += 1;
       await this.saveDailyAuto(this.dailyAuto);
+      const target = Number(this.dailyAuto.target) || 0;
+      if (target > 0 && this.dailyAuto.count >= target) {
+        await this.finishDailyAuto(`已完成每日任务（${target} 次），已停止`);
+        return true;
+      }
     }
     return false;
   }
@@ -1098,6 +1099,8 @@ class HumanBrowser {
   }
 
   async getCurrentBaseUrl() {
+    // 固定：每日任务仅对 linux.do（linuxfo）生效
+    if (this.isDailyAutoRunning()) return 'https://linux.do';
     const result = await this.safeStorageGet(['useIdcflareSite']);
     const useIdcflare = result.useIdcflareSite || false;
     return useIdcflare ? 'https://idcflare.com' : 'https://linux.do';
@@ -1106,13 +1109,15 @@ class HumanBrowser {
   // 开始浏览（不清空历史记录）
   async startDaily(target, date, options = {}) {
     this.dailyAuto = await this.loadDailyAuto();
-    if (!this.dailyAuto.enabled) {
-      this.sendMessage({ type: 'log', message: '每日自动浏览已关闭' });
-      return;
-    }
+    // 固定：每日任务强制开启，这里仅做兜底
+    this.dailyAuto.enabled = true;
     const today = this.getTodayString();
     this.dailyAuto.date = date || today;
     this.dailyAuto.count = 0;
+    const normalizedTarget = Number(target);
+    if (Number.isFinite(normalizedTarget) && normalizedTarget > 0) {
+      this.dailyAuto.target = Math.floor(normalizedTarget);
+    }
     this.dailyAuto.time = this.normalizeDailyTime(this.dailyAuto.time);
     this.dailyAuto.endTime = this.defaultDailyEndTime(this.dailyAuto.time);
     this.dailyAuto.running = true;
@@ -1483,7 +1488,6 @@ window.addEventListener('beforeunload', () => {
     browser.saveState(browser.state);
   }
 });
-
 
 
 
